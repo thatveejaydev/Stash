@@ -41,6 +41,7 @@ namespace MediaDownloader
         Queued,
         FetchingInfo,
         Downloading,
+        Paused,
         Merging,
         Completed,
         Cancelled,
@@ -68,6 +69,9 @@ namespace MediaDownloader
         public string OutputFilePath { get; set; }
         public Process ActiveProcess { get; set; }
         public CancellationTokenSource CancellationSource { get; set; }
+        public bool IsPauseRequested { get; set; }
+        public bool MetadataResolved { get; set; }
+        public List<string> TrackedFilePaths { get; set; }
 
         public DownloadQueueItem(
             string url,
@@ -96,6 +100,9 @@ namespace MediaDownloader
             Speed = "—";
             Eta = "—";
             CancellationSource = new CancellationTokenSource();
+            IsPauseRequested = false;
+            MetadataResolved = false;
+            TrackedFilePaths = new List<string>();
         }
     }
 
@@ -1220,6 +1227,7 @@ namespace MediaDownloader
         private const int RowGap = 6;
 
         public event EventHandler SelectionChanged;
+        public event Action<DownloadQueueItem> PauseResumeRequested;
         public event Action<DownloadQueueItem> CancelRequested;
         public event Action<DownloadQueueItem> OpenFileFolderRequested;
 
@@ -1332,10 +1340,18 @@ namespace MediaDownloader
                 SelectedItem = hit;
                 if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty);
 
+                Rectangle pauseRect = GetPauseResumeButtonRect(rowRect);
+                if (CanPauseOrResume(hit.Status) && pauseRect.Contains(e.Location))
+                {
+                    if (PauseResumeRequested != null) PauseResumeRequested(hit);
+                    Invalidate();
+                    return;
+                }
+
                 Rectangle actionRect = GetActionButtonRect(rowRect);
                 if (actionRect.Contains(e.Location))
                 {
-                    if (IsActiveStatus(hit.Status))
+                    if (CanCancelStatus(hit.Status))
                     {
                         if (CancelRequested != null) CancelRequested(hit);
                     }
@@ -1352,6 +1368,17 @@ namespace MediaDownloader
         {
             return st == QueueItemStatus.Queued || st == QueueItemStatus.FetchingInfo ||
                    st == QueueItemStatus.Downloading || st == QueueItemStatus.Merging;
+        }
+
+        private bool CanPauseOrResume(QueueItemStatus st)
+        {
+            return st == QueueItemStatus.Queued || st == QueueItemStatus.FetchingInfo ||
+                   st == QueueItemStatus.Downloading || st == QueueItemStatus.Paused;
+        }
+
+        private bool CanCancelStatus(QueueItemStatus st)
+        {
+            return IsActiveStatus(st) || st == QueueItemStatus.Paused;
         }
 
         private DownloadQueueItem HitTestItem(Point pt)
@@ -1380,6 +1407,11 @@ namespace MediaDownloader
                 }
             }
             return null;
+        }
+
+        private Rectangle GetPauseResumeButtonRect(Rectangle rowRect)
+        {
+            return new Rectangle(rowRect.Right - 70, rowRect.Y + (rowRect.Height - 26) / 2, 26, 26);
         }
 
         private Rectangle GetActionButtonRect(Rectangle rowRect)
@@ -1459,6 +1491,7 @@ namespace MediaDownloader
 
             Color statusColor = Theme.BrandPurple;
             if (item.Status == QueueItemStatus.Completed) statusColor = Theme.AccentSuccess;
+            else if (item.Status == QueueItemStatus.Paused) statusColor = Theme.AccentWarning;
             else if (item.Status == QueueItemStatus.Error || item.Status == QueueItemStatus.Cancelled) statusColor = Theme.AccentDanger;
             else if (item.Status == QueueItemStatus.Merging) statusColor = Theme.AccentPurple;
             else if (item.Status == QueueItemStatus.Queued) statusColor = Theme.TextMuted;
@@ -1470,6 +1503,9 @@ namespace MediaDownloader
             {
                 g.FillPath(indBrush, indPath);
             }
+
+            bool hasPauseBtn = CanPauseOrResume(item.Status);
+            int rightControlsReserve = hasPauseBtn ? 82 : 50;
 
             // Format & Resolution Badge
             string badgeText = item.BadgeLabel;
@@ -1487,7 +1523,7 @@ namespace MediaDownloader
 
                 // Title
                 int titleLeft = badgeRect.Right + 10;
-                int titleWidth = Math.Max(80, rect.Width - titleLeft - 230);
+                int titleWidth = Math.Max(80, rect.Width - titleLeft - (rightControlsReserve + 210));
                 Rectangle titleRect = new Rectangle(titleLeft, rect.Y + 9, titleWidth, 22);
                 using (Font fTitle = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold))
                 {
@@ -1502,12 +1538,16 @@ namespace MediaDownloader
             {
                 telemetryText = string.Format("{0:0.0}%  •  {1}  •  ETA {2}", item.ProgressPercent, item.Speed, item.Eta);
             }
+            else if (item.Status == QueueItemStatus.Paused)
+            {
+                telemetryText = string.Format("Paused  •  {0:0.0}%", item.ProgressPercent);
+            }
             else if (item.Status == QueueItemStatus.Completed)
             {
                 telemetryText = "Completed  •  100%";
             }
 
-            Rectangle statusRect = new Rectangle(rect.Right - 255, rect.Y + 10, 208, 20);
+            Rectangle statusRect = new Rectangle(rect.Right - rightControlsReserve - 208, rect.Y + 10, 204, 20);
             using (Font fStatus = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold))
             {
                 TextRenderer.DrawText(g, telemetryText, fStatus, statusRect, statusColor,
@@ -1515,7 +1555,7 @@ namespace MediaDownloader
             }
 
             // Bottom Sleek Progress Bar Track
-            Rectangle trackRect = new Rectangle(rect.X + 24, rect.Bottom - 16, rect.Width - 72, 6);
+            Rectangle trackRect = new Rectangle(rect.X + 24, rect.Bottom - 16, rect.Width - 24 - rightControlsReserve, 6);
             using (GraphicsPath tp = Theme.CreateRoundedRectangle(trackRect, 3))
             using (SolidBrush tb = new SolidBrush(Color.FromArgb(16, 18, 22)))
             {
@@ -1534,9 +1574,47 @@ namespace MediaDownloader
                 }
             }
 
-            // Quick Action Button on Right (Cancel '✕' for active, Open Folder '↗' for completed)
+            // Pause / Resume Button on Right (Next to Cancel button)
+            if (hasPauseBtn)
+            {
+                Rectangle pauseRect = GetPauseResumeButtonRect(rect);
+                bool isPaused = (item.Status == QueueItemStatus.Paused);
+                Color btnBg = isPaused ? Color.FromArgb(26, 48, 34) : Color.FromArgb(46, 40, 26);
+                Color iconCol = isPaused ? Theme.AccentSuccess : Theme.AccentWarning;
+
+                using (GraphicsPath pp = Theme.CreateRoundedRectangle(pauseRect, 5))
+                using (SolidBrush pb = new SolidBrush(btnBg))
+                {
+                    g.FillPath(pb, pp);
+                }
+
+                using (SolidBrush ib = new SolidBrush(iconCol))
+                {
+                    int cx = pauseRect.X + pauseRect.Width / 2;
+                    int cy = pauseRect.Y + pauseRect.Height / 2;
+                    if (isPaused)
+                    {
+                        // Crisp Play / Resume Triangle (▶)
+                        Point[] tri = new Point[]
+                        {
+                            new Point(cx - 3, cy - 5),
+                            new Point(cx - 3, cy + 5),
+                            new Point(cx + 5, cy)
+                        };
+                        g.FillPolygon(ib, tri);
+                    }
+                    else
+                    {
+                        // Crisp Pause Bars (❚❚)
+                        g.FillRectangle(ib, cx - 4, cy - 5, 3, 10);
+                        g.FillRectangle(ib, cx + 1, cy - 5, 3, 10);
+                    }
+                }
+            }
+
+            // Quick Action Button on Right (Cancel '✕' for active/paused, Open Folder '↗' for completed)
             Rectangle actRect = GetActionButtonRect(rect);
-            if (IsActiveStatus(item.Status))
+            if (CanCancelStatus(item.Status))
             {
                 using (GraphicsPath ap = Theme.CreateRoundedRectangle(actRect, 5))
                 using (SolidBrush ab = new SolidBrush(Color.FromArgb(48, 28, 32)))
@@ -2026,6 +2104,7 @@ namespace MediaDownloader
             {
                 Dock = DockStyle.Fill
             };
+            queueListView.PauseResumeRequested += TogglePauseResumeItem;
             queueListView.CancelRequested += CancelSingleItem;
             queueListView.OpenFileFolderRequested += OpenCompletedItemFolder;
             pnlCenter.Controls.Add(queueListView);
@@ -3010,7 +3089,7 @@ namespace MediaDownloader
                 : Path.Combine(item.OutputFolder, "%(title).180B.%(ext)s");
 
             StringBuilder args = new StringBuilder();
-            args.Append("--newline --no-colors --progress --no-playlist ");
+            args.Append("--newline --no-colors --progress --no-playlist --continue ");
 
             // Multi-Connection Turbo Downloading: concurrent DASH/HLS fragments + chunked HTTP Range requests to bypass single-stream server throttling
             if (item.ConcurrentFragments > 1)
@@ -3097,27 +3176,32 @@ namespace MediaDownloader
         {
             try
             {
-                Tuple<string, string> meta = await FetchMetadataTitleAndIdAsync(item);
-
-                if (item.CancellationSource.IsCancellationRequested)
+                if (!item.MetadataResolved)
                 {
-                    MarkCancelled(item);
-                    return;
-                }
+                    Tuple<string, string> meta = await FetchMetadataTitleAndIdAsync(item);
 
-                if (!string.IsNullOrWhiteSpace(meta.Item1))
-                {
-                    bool proceed = CheckAndPromptForDuplicateRename(item, meta.Item1, meta.Item2);
-                    if (!proceed)
+                    if (item.CancellationSource.IsCancellationRequested)
                     {
-                        MarkCancelled(item);
+                        if (item.IsPauseRequested) MarkPaused(item);
+                        else MarkCancelled(item);
                         return;
                     }
-                    RefreshQueueUi();
+
+                    if (!string.IsNullOrWhiteSpace(meta.Item1))
+                    {
+                        bool proceed = CheckAndPromptForDuplicateRename(item, meta.Item1, meta.Item2);
+                        if (!proceed)
+                        {
+                            MarkCancelled(item);
+                            return;
+                        }
+                        item.MetadataResolved = true;
+                        RefreshQueueUi();
+                    }
                 }
 
                 item.Status = QueueItemStatus.Downloading;
-                item.StatusText = "Starting...";
+                item.StatusText = item.ProgressPercent > 0 ? "Resuming..." : "Starting...";
                 RefreshQueueUi();
 
                 string arguments = BuildYtDlpArguments(item);
@@ -3164,7 +3248,8 @@ namespace MediaDownloader
                         if (item.CancellationSource.IsCancellationRequested)
                         {
                             KillProcessTree(proc.Id);
-                            MarkCancelled(item);
+                            if (item.IsPauseRequested) MarkPaused(item);
+                            else MarkCancelled(item);
                             return;
                         }
                         await Task.Delay(150);
@@ -3174,7 +3259,8 @@ namespace MediaDownloader
 
                     if (item.CancellationSource.IsCancellationRequested)
                     {
-                        MarkCancelled(item);
+                        if (item.IsPauseRequested) MarkPaused(item);
+                        else MarkCancelled(item);
                     }
                     else if (proc.ExitCode == 0)
                     {
@@ -3199,7 +3285,8 @@ namespace MediaDownloader
             {
                 if (item.CancellationSource.IsCancellationRequested)
                 {
-                    MarkCancelled(item);
+                    if (item.IsPauseRequested) MarkPaused(item);
+                    else MarkCancelled(item);
                 }
                 else
                 {
@@ -3281,6 +3368,13 @@ namespace MediaDownloader
                 if (!string.IsNullOrEmpty(path))
                 {
                     item.OutputFilePath = path;
+                    lock (item.TrackedFilePaths)
+                    {
+                        if (!item.TrackedFilePaths.Contains(path))
+                        {
+                            item.TrackedFilePaths.Add(path);
+                        }
+                    }
                     if (item.Title == item.Url)
                     {
                         item.Title = Path.GetFileNameWithoutExtension(path);
@@ -3336,6 +3430,16 @@ namespace MediaDownloader
             }
         }
 
+        private void MarkPaused(DownloadQueueItem item)
+        {
+            item.Status = QueueItemStatus.Paused;
+            item.StatusText = "Paused";
+            item.Speed = "—";
+            item.Eta = "—";
+            RefreshQueueUi();
+            AppendLog(string.Format("[{0}] Paused at {1:0.0}%: {2}", item.Id, item.ProgressPercent, item.Title));
+        }
+
         private void MarkCancelled(DownloadQueueItem item)
         {
             item.Status = QueueItemStatus.Cancelled;
@@ -3344,6 +3448,93 @@ namespace MediaDownloader
             item.Eta = "—";
             RefreshQueueUi();
             AppendLog(string.Format("[{0}] Cancelled: {1}", item.Id, item.Title));
+            Task.Run(() => CleanupPartialFilesForItemAsync(item));
+        }
+
+        private async Task CleanupPartialFilesForItemAsync(DownloadQueueItem item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.OutputFolder) || !Directory.Exists(item.OutputFolder))
+                return;
+
+            List<string> basePrefixes = new List<string>();
+            if (!string.IsNullOrEmpty(item.CustomBaseFileName))
+            {
+                basePrefixes.Add(item.CustomBaseFileName);
+            }
+            if (!string.IsNullOrEmpty(item.Title) && item.Title != item.Url)
+            {
+                string sanitized = RenamePromptDialog.SanitizeFileName(item.Title);
+                if (!string.IsNullOrEmpty(sanitized) && !basePrefixes.Contains(sanitized))
+                {
+                    basePrefixes.Add(sanitized);
+                }
+            }
+            lock (item.TrackedFilePaths)
+            {
+                foreach (string tracked in item.TrackedFilePaths)
+                {
+                    string fileName = Path.GetFileName(tracked);
+                    if (!string.IsNullOrEmpty(fileName))
+                    {
+                        basePrefixes.Add(fileName);
+                        string noExt = Path.GetFileNameWithoutExtension(fileName);
+                        if (!string.IsNullOrEmpty(noExt)) basePrefixes.Add(noExt);
+                    }
+                }
+            }
+
+            int deletedCount = 0;
+
+            // Retry a few times to allow killed yt-dlp/ffmpeg child processes to release OS file handles
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                await Task.Delay(150);
+                try
+                {
+                    string[] allFiles = Directory.GetFiles(item.OutputFolder);
+                    foreach (string fullPath in allFiles)
+                    {
+                        string fileName = Path.GetFileName(fullPath);
+                        if (string.IsNullOrEmpty(fileName)) continue;
+
+                        bool isTempOrFragment =
+                            fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith(".ytdl", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith(".temp", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.IndexOf(".part-Frag", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            Regex.IsMatch(fileName, @"\.f[0-9]+\.[a-zA-Z0-9]+(\.part.*)?$", RegexOptions.IgnoreCase);
+
+                        if (!isTempOrFragment) continue;
+
+                        bool matchesItem = false;
+                        foreach (string prefix in basePrefixes)
+                        {
+                            if (!string.IsNullOrEmpty(prefix) &&
+                                fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            {
+                                matchesItem = true;
+                                break;
+                            }
+                        }
+
+                        if (matchesItem)
+                        {
+                            try
+                            {
+                                File.Delete(fullPath);
+                                deletedCount++;
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (deletedCount > 0)
+            {
+                AppendLog(string.Format("[{0}] Cleaned up {1} temporary fragment file(s).", item.Id, deletedCount));
+            }
         }
 
         private void KillProcessTree(int pid)
@@ -3363,16 +3554,49 @@ namespace MediaDownloader
             catch { }
         }
 
+        private void TogglePauseResumeItem(DownloadQueueItem item)
+        {
+            if (item == null) return;
+
+            if (item.Status == QueueItemStatus.Downloading ||
+                item.Status == QueueItemStatus.FetchingInfo ||
+                item.Status == QueueItemStatus.Queued)
+            {
+                item.IsPauseRequested = true;
+                item.CancellationSource.Cancel();
+                if (item.Status == QueueItemStatus.Queued)
+                {
+                    MarkPaused(item);
+                }
+                else if (item.ActiveProcess != null && !item.ActiveProcess.HasExited)
+                {
+                    KillProcessTree(item.ActiveProcess.Id);
+                }
+            }
+            else if (item.Status == QueueItemStatus.Paused)
+            {
+                item.IsPauseRequested = false;
+                item.CancellationSource = new CancellationTokenSource();
+                item.Status = QueueItemStatus.Queued;
+                item.StatusText = "Resuming...";
+                RefreshQueueUi();
+                AppendLog(string.Format("[{0}] Resumed: {1}", item.Id, item.Title));
+                ProcessQueue();
+            }
+        }
+
         private void CancelSingleItem(DownloadQueueItem item)
         {
             if (item == null) return;
             if (item.Status == QueueItemStatus.Queued ||
                 item.Status == QueueItemStatus.FetchingInfo ||
                 item.Status == QueueItemStatus.Downloading ||
-                item.Status == QueueItemStatus.Merging)
+                item.Status == QueueItemStatus.Merging ||
+                item.Status == QueueItemStatus.Paused)
             {
+                item.IsPauseRequested = false;
                 item.CancellationSource.Cancel();
-                if (item.Status == QueueItemStatus.Queued)
+                if (item.Status == QueueItemStatus.Queued || item.Status == QueueItemStatus.Paused)
                 {
                     MarkCancelled(item);
                 }
