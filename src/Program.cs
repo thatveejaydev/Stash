@@ -3025,23 +3025,52 @@ namespace MediaDownloader
             }
 
             int heightCap = GetResolutionHeightCap(item.Resolution);
-            string videoFilter = heightCap > 0
-                ? string.Format("bv*[height<={0}]+ba/b[height<={0}]/bv*+ba/b", heightCap)
-                : "bv*+ba/b";
 
             switch (item.Mode)
             {
                 case DownloadMode.BestVideoAndAudioMp4:
-                    args.AppendFormat("-f \"{0}\" --merge-output-format mp4 ", videoFilter);
+                {
+                    // Adaptive Smart Muxing Without Re-encoding:
+                    // 1) For <= 1080p caps: prioritize native H.264 (avc) + AAC (mp4a/m4a) for instant 1-second FFmpeg stream copy and universal compatibility, with safe fallbacks.
+                    // 2) For Best / 1440p / 4K: sort by highest resolution first, then prefer H.264/AAC at that resolution, and always prefer native AAC audio (m4a) so FFmpeg never has to re-encode audio.
+                    string mp4Filter;
+                    string mp4Sort;
+                    if (heightCap > 0 && heightCap <= 1080)
+                    {
+                        mp4Filter = string.Format(
+                            "bv*[vcodec^=avc][height<={0}]+ba[acodec^=mp4a]/bv*[ext=mp4][height<={0}]+ba[ext=m4a]/bv*[height<={0}]+ba[ext=m4a]/bv*[height<={0}]+ba/b[height<={0}]/bv*+ba/b",
+                            heightCap);
+                        mp4Sort = string.Format("res:{0},vcodec:h264,acodec:aac,ext:mp4:m4a", heightCap);
+                    }
+                    else if (heightCap > 1080)
+                    {
+                        mp4Filter = string.Format(
+                            "bv*[height<={0}]+ba[acodec^=mp4a]/bv*[height<={0}]+ba[ext=m4a]/bv*[height<={0}]+ba/b[height<={0}]/bv*+ba/b",
+                            heightCap);
+                        mp4Sort = string.Format("res:{0},vcodec:h264,acodec:aac,ext:mp4:m4a", heightCap);
+                    }
+                    else
+                    {
+                        mp4Filter = "bv*+ba[acodec^=mp4a]/bv*+ba[ext=m4a]/bv*+ba/b";
+                        mp4Sort = "res,vcodec:h264,acodec:aac,ext:mp4:m4a";
+                    }
+                    args.AppendFormat("-f \"{0}\" -S \"{1}\" --merge-output-format mp4 ", mp4Filter, mp4Sort);
                     break;
+                }
                 case DownloadMode.BestVideoAndAudioMkv:
-                    args.AppendFormat("-f \"{0}\" --merge-output-format mkv ", videoFilter);
+                {
+                    string mkvFilter = heightCap > 0
+                        ? string.Format("bv*[height<={0}]+ba/b[height<={0}]/bv*+ba/b", heightCap)
+                        : "bv*+ba/b";
+                    args.AppendFormat("-f \"{0}\" --merge-output-format mkv ", mkvFilter);
                     break;
+                }
                 case DownloadMode.BestAudioOnlyMp3:
                     args.Append("-f \"ba/b\" -x --audio-format mp3 --audio-quality 0 ");
                     break;
                 case DownloadMode.BestAudioOnlyM4a:
-                    args.Append("-f \"ba[ext=m4a]/ba/b\" -x --audio-format m4a --audio-quality 0 ");
+                    // Prefer native AAC/m4a stream so FFmpeg can fast-copy without re-encoding
+                    args.Append("-f \"ba[acodec^=mp4a]/ba[ext=m4a]/ba/b\" -x --audio-format m4a --audio-quality 0 ");
                     break;
                 case DownloadMode.BestAudioOnlyFlac:
                     args.Append("-f \"ba/b\" -x --audio-format flac --audio-quality 0 ");
