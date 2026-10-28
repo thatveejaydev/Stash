@@ -56,6 +56,7 @@ namespace MediaDownloader
         public VideoResolution Resolution { get; set; }
         public bool EmbedMetadata { get; set; }
         public bool EmbedThumbnail { get; set; }
+        public int ConcurrentFragments { get; set; }
         public string BadgeLabel { get; set; }
         public string OutputFolder { get; set; }
         public string CustomBaseFileName { get; set; }
@@ -74,6 +75,7 @@ namespace MediaDownloader
             VideoResolution resolution,
             bool embedMetadata,
             bool embedThumbnail,
+            int concurrentFragments,
             string badgeLabel,
             string outputFolder)
         {
@@ -84,6 +86,7 @@ namespace MediaDownloader
             Resolution = resolution;
             EmbedMetadata = embedMetadata;
             EmbedThumbnail = embedThumbnail;
+            ConcurrentFragments = Math.Max(1, Math.Min(16, concurrentFragments));
             BadgeLabel = badgeLabel;
             OutputFolder = outputFolder;
             CustomBaseFileName = null;
@@ -106,6 +109,7 @@ namespace MediaDownloader
         public bool EmbedMetadata { get; set; }
         public bool EmbedThumbnail { get; set; }
         public int ParallelCount { get; set; }
+        public int ConcurrentFragments { get; set; }
 
         private static string GetSettingsPath()
         {
@@ -125,6 +129,7 @@ namespace MediaDownloader
             EmbedMetadata = true;
             EmbedThumbnail = true;
             ParallelCount = 2;
+            ConcurrentFragments = 8; // Default 8x Multi-Connection Turbo
         }
 
         public void AddFolderToHistory(string folder)
@@ -212,6 +217,8 @@ namespace MediaDownloader
                         s.EmbedThumbnail = parsedBool;
                     else if (key == "ParallelCount" && int.TryParse(val, out parsedInt))
                         s.ParallelCount = Math.Max(1, Math.Min(6, parsedInt));
+                    else if (key == "ConcurrentFragments" && int.TryParse(val, out parsedInt))
+                        s.ConcurrentFragments = Math.Max(1, Math.Min(16, parsedInt));
                 }
 
                 if (loadedHistory.Count > 0)
@@ -235,6 +242,7 @@ namespace MediaDownloader
                 sb.AppendLine("EmbedMetadata=" + EmbedMetadata);
                 sb.AppendLine("EmbedThumbnail=" + EmbedThumbnail);
                 sb.AppendLine("ParallelCount=" + ParallelCount);
+                sb.AppendLine("ConcurrentFragments=" + ConcurrentFragments);
                 foreach (string dir in RecentFolders)
                 {
                     sb.AppendLine("RecentFolder=" + dir);
@@ -484,44 +492,49 @@ namespace MediaDownloader
                 g.FillPath(b, path);
             }
 
-            int iconCenterX = 34;
+            int iconCenterX = 33;
             int iconCenterY = Height / 2;
-            DrawLinkPlusIcon(g, new Point(iconCenterX, iconCenterY), Color.White, fill);
+            DrawClipboardPasteIcon(g, new Point(iconCenterX, iconCenterY), Color.White, fill);
 
-            Rectangle textRect = new Rectangle(50, 0, Width - 56, Height);
+            Rectangle textRect = new Rectangle(48, 0, Width - 54, Height);
             TextRenderer.DrawText(g, "Paste Link", Font, textRect, Color.White,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
 
-        private void DrawLinkPlusIcon(Graphics g, Point center, Color fg, Color bg)
+        private void DrawClipboardPasteIcon(Graphics g, Point center, Color fg, Color bg)
         {
-            GraphicsState state = g.Save();
-            g.TranslateTransform(center.X - 2, center.Y - 1);
-            g.RotateTransform(-42f);
-            using (Pen p = new Pen(fg, 1.7f))
+            // Crisp Clipboard + Down Arrow icon
+            Rectangle boardRect = new Rectangle(center.X - 6, center.Y - 6, 12, 14);
+            using (Pen p = new Pen(fg, 1.6f))
+            using (GraphicsPath boardPath = Theme.CreateRoundedRectangle(boardRect, 2))
             {
-                using (GraphicsPath link1 = Theme.CreateRoundedRectangle(new Rectangle(-8, -4, 10, 7), 3))
-                {
-                    g.DrawPath(p, link1);
-                }
-                using (GraphicsPath link2 = Theme.CreateRoundedRectangle(new Rectangle(-2, -4, 10, 7), 3))
-                {
-                    g.DrawPath(p, link2);
-                }
+                g.DrawPath(p, boardPath);
             }
-            g.Restore(state);
 
-            Rectangle badgeRect = new Rectangle(center.X, center.Y, 10, 10);
-            using (SolidBrush b = new SolidBrush(fg))
+            // Top clip tab
+            Rectangle clipClear = new Rectangle(center.X - 4, center.Y - 8, 8, 4);
+            using (SolidBrush clearBrush = new SolidBrush(bg))
             {
-                g.FillEllipse(b, badgeRect);
+                g.FillRectangle(clearBrush, clipClear);
             }
-            using (Pen plusPen = new Pen(bg, 1.5f))
+            Rectangle clipRect = new Rectangle(center.X - 3, center.Y - 8, 6, 3);
+            using (Pen p = new Pen(fg, 1.5f))
+            using (GraphicsPath clipPath = Theme.CreateRoundedRectangle(clipRect, 1))
             {
-                int cx = badgeRect.X + 5;
-                int cy = badgeRect.Y + 5;
-                g.DrawLine(plusPen, cx - 2, cy, cx + 2, cy);
-                g.DrawLine(plusPen, cx, cy - 2, cx, cy + 2);
+                g.DrawPath(p, clipPath);
+            }
+
+            // Downward arrow inside the clipboard
+            using (Pen arrowPen = new Pen(fg, 1.5f))
+            {
+                arrowPen.StartCap = LineCap.Round;
+                arrowPen.EndCap = LineCap.Round;
+                int ax = center.X;
+                int topY = center.Y - 2;
+                int botY = center.Y + 4;
+                g.DrawLine(arrowPen, ax, topY, ax, botY);
+                g.DrawLine(arrowPen, ax - 2, botY - 2, ax, botY);
+                g.DrawLine(arrowPen, ax + 2, botY - 2, ax, botY);
             }
         }
     }
@@ -717,7 +730,7 @@ namespace MediaDownloader
                 }
             }
 
-            int contentLeft = 32;
+            int contentLeft = string.IsNullOrEmpty(CheckGlyph) ? 14 : 32;
             int rightMargin = AllowRemove ? 38 : 10;
 
             if (string.IsNullOrEmpty(SubText))
@@ -743,16 +756,16 @@ namespace MediaDownloader
             }
             else
             {
-                // Two-line mode: Folder Name on top, tiny path text below it
+                // Two-line mode: Title on top, smaller muted subtext directly underneath
                 Rectangle rTitle = new Rectangle(contentLeft, 4, Width - contentLeft - rightMargin, 20);
-                using (Font fTitle = new Font("Segoe UI Semibold", 9.2F, FontStyle.Bold))
+                using (Font fTitle = new Font("Segoe UI", 9.2F, (IsSelected || AllowRemove) ? FontStyle.Bold : FontStyle.Regular))
                 {
                     TextRenderer.DrawText(g, TitleText, fTitle, rTitle, mainColor,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 }
 
                 Rectangle rSub = new Rectangle(contentLeft, 23, Width - contentLeft - rightMargin, 17);
-                using (Font fTiny = new Font("Segoe UI", 7.6F, FontStyle.Regular))
+                using (Font fTiny = new Font("Segoe UI", 7.3F, FontStyle.Regular))
                 {
                     TextRenderer.DrawText(g, SubText, fTiny, rSub, Theme.TextMuted,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PathEllipsis | TextFormatFlags.NoPrefix);
@@ -1407,13 +1420,17 @@ namespace MediaDownloader
         {
             string title = "Ready to Download";
             string sub = "Copy any video or audio link and click 'Paste Link' (or press Ctrl+V anywhere in this window).";
+            string credit = "Developed by Vee Jay";
             using (Font fTitle = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold))
             using (Font fSub = new Font("Segoe UI", 9.5F, FontStyle.Regular))
+            using (Font fCredit = new Font("Segoe UI", 8.5F, FontStyle.Regular))
             {
-                Rectangle r1 = new Rectangle(0, ClientSize.Height / 2 - 28, ClientSize.Width, 26);
-                Rectangle r2 = new Rectangle(0, ClientSize.Height / 2, ClientSize.Width, 24);
+                Rectangle r1 = new Rectangle(0, ClientSize.Height / 2 - 36, ClientSize.Width, 26);
+                Rectangle r2 = new Rectangle(0, ClientSize.Height / 2 - 8, ClientSize.Width, 24);
+                Rectangle r3 = new Rectangle(0, ClientSize.Height / 2 + 18, ClientSize.Width, 22);
                 TextRenderer.DrawText(g, title, fTitle, r1, Theme.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 TextRenderer.DrawText(g, sub, fSub, r2, Theme.TextMuted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, credit, fCredit, r3, Color.FromArgb(92, 98, 114), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
 
@@ -1561,8 +1578,7 @@ namespace MediaDownloader
         private InlineFlowSelector selDownloadFormat;
         private InlineFlowSelector selQuality;
         private InlineFlowSelector selSaveTo;
-        private InlineFlowSelector selEmbedTags;
-        private InlineFlowSelector selParallel;
+        private InlineFlowSelector selOptions;
 
         // Queue & Status Bar Controls
         private ModernButton btnCancelSelected;
@@ -1749,6 +1765,14 @@ namespace MediaDownloader
             return "None";
         }
 
+        private string GetOptionsSummaryLabel()
+        {
+            return string.Format("{0} • {1} • {2}x",
+                GetEmbedShortDisplayName(),
+                settings.ParallelCount,
+                settings.ConcurrentFragments);
+        }
+
         private void InitializeUi()
         {
             Text = "Stash";
@@ -1830,19 +1854,13 @@ namespace MediaDownloader
             appToolTip.SetToolTip(selSaveTo, settings.CurrentOutputFolder);
             selSaveTo.Clicked += (s, e) => ShowSaveToHistoryPopup();
 
-            // "Embed  Tags + Art ⌄"
-            selEmbedTags = new InlineFlowSelector("Embed", GetEmbedShortDisplayName())
-            {
-                Margin = new Padding(0, 2, 12, 0)
-            };
-            selEmbedTags.Clicked += (s, e) => ShowEmbedMultiSelectPopup();
-
-            // "Parallel  2 ⌄"
-            selParallel = new InlineFlowSelector("Parallel", settings.ParallelCount.ToString())
+            // Combined Nested Dropdown for "Embed", "Parallel", and "Turbo"
+            selOptions = new InlineFlowSelector("Options", GetOptionsSummaryLabel())
             {
                 Margin = new Padding(0, 2, 0, 0)
             };
-            selParallel.Clicked += (s, e) => ShowParallelPopup();
+            appToolTip.SetToolTip(selOptions, "Configure Embed Tags, Parallel Downloads, and Multi-Connection Turbo");
+            selOptions.Clicked += (s, e) => ShowOptionsNestedPopup();
 
             toggleSmartMode.CheckedChanged += (s, e) =>
             {
@@ -1850,8 +1868,7 @@ namespace MediaDownloader
                 selDownloadFormat.Enabled = on;
                 UpdateQualitySelectorEnabledState();
                 selSaveTo.Enabled = on;
-                selEmbedTags.Enabled = on;
-                selParallel.Enabled = on;
+                selOptions.Enabled = on;
             };
 
             UpdateQualitySelectorEnabledState();
@@ -1861,8 +1878,7 @@ namespace MediaDownloader
             flowTop.Controls.Add(selDownloadFormat);
             flowTop.Controls.Add(selQuality);
             flowTop.Controls.Add(selSaveTo);
-            flowTop.Controls.Add(selEmbedTags);
-            flowTop.Controls.Add(selParallel);
+            flowTop.Controls.Add(selOptions);
 
             pnlTopBar.Controls.Add(flowTop);
 
@@ -2226,7 +2242,180 @@ namespace MediaDownloader
             }
         }
 
-        private void ShowEmbedMultiSelectPopup()
+        // Nested Dropdown containing "Embed", "Parallel", and "Turbo" submenus inside a single Region-shaped popup
+        private void ShowOptionsNestedPopup()
+        {
+            int leftWidth = 225;
+            int leftHeight = 3 * 34 + 8; // 110
+            int gap = 4;
+            int rightMaxWidth = 220;
+            int totalWidth = leftWidth + gap + rightMaxWidth;
+            int totalHeight = 34 + (6 * 46 + 8) + 8; // Enough height for 6 two-line rows in Parallel & 5 in Turbo
+
+            Panel rootContainer = new Panel
+            {
+                BackColor = Theme.BgWindow,
+                Width = totalWidth,
+                Height = totalHeight
+            };
+
+            Panel pnlLeft = new Panel
+            {
+                BackColor = Theme.BgSurface,
+                Location = new Point(0, 0),
+                Width = leftWidth,
+                Height = leftHeight
+            };
+            pnlLeft.Paint += (s, e) =>
+            {
+                using (Pen p = new Pen(Theme.BorderHover, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlLeft.Width - 1, pnlLeft.Height - 1);
+                }
+            };
+
+            Panel pnlRightHost = new Panel
+            {
+                BackColor = Theme.BgSurface,
+                Location = new Point(leftWidth + gap, 0),
+                Width = rightMaxWidth,
+                Height = 76,
+                Visible = false
+            };
+
+            ToolStripControlHost host = new ToolStripControlHost(rootContainer)
+            {
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                AutoSize = false,
+                Size = rootContainer.Size
+            };
+
+            ToolStripDropDown popup = new ToolStripDropDown
+            {
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                AutoSize = false,
+                Size = rootContainer.Size,
+                BackColor = Theme.BgSurface,
+                DropShadowEnabled = false
+            };
+            popup.Items.Add(host);
+
+            Action updatePopupRegion = () =>
+            {
+                Region reg = new Region(pnlLeft.Bounds);
+                if (pnlRightHost.Visible)
+                {
+                    // Include the 4px bridge gap between left menu and right submenu so the mouse never leaves the popup region while crossing over
+                    Rectangle bridge = new Rectangle(pnlLeft.Right, pnlRightHost.Top, gap, Math.Min(pnlLeft.Bottom, pnlRightHost.Bottom) - pnlRightHost.Top);
+                    if (bridge.Height > 0) reg.Union(bridge);
+                    reg.Union(pnlRightHost.Bounds);
+                }
+                popup.Region = reg;
+            };
+
+            PopupMenuRow rowEmbed = new PopupMenuRow(
+                "Embed",
+                GetEmbedShortDisplayName() + "   ▸",
+                null,
+                false,
+                "")
+            {
+                Location = new Point(4, 4),
+                Width = leftWidth - 8
+            };
+
+            PopupMenuRow rowParallel = new PopupMenuRow(
+                "Parallel",
+                settings.ParallelCount + (settings.ParallelCount == 1 ? " Download   ▸" : " Downloads   ▸"),
+                null,
+                false,
+                "")
+            {
+                Location = new Point(4, 38),
+                Width = leftWidth - 8
+            };
+
+            PopupMenuRow rowTurbo = new PopupMenuRow(
+                "Turbo",
+                settings.ConcurrentFragments + "x   ▸",
+                null,
+                false,
+                "")
+            {
+                Location = new Point(4, 72),
+                Width = leftWidth - 8
+            };
+
+            int currentSubmenuIndex = -1;
+
+            Action<int, PopupMenuRow, Panel, int> showSubmenu = (index, ownerRow, childPanel, alignY) =>
+            {
+                if (currentSubmenuIndex == index && pnlRightHost.Visible) return;
+                currentSubmenuIndex = index;
+
+                rowEmbed.IsSelected = (ownerRow == rowEmbed);
+                rowParallel.IsSelected = (ownerRow == rowParallel);
+                rowTurbo.IsSelected = (ownerRow == rowTurbo);
+                rowEmbed.Invalidate();
+                rowParallel.Invalidate();
+                rowTurbo.Invalidate();
+
+                pnlRightHost.SuspendLayout();
+                pnlRightHost.Controls.Clear();
+                pnlRightHost.Location = new Point(leftWidth + gap, alignY);
+                pnlRightHost.Size = childPanel.Size;
+                childPanel.Location = Point.Empty;
+                pnlRightHost.Controls.Add(childPanel);
+                pnlRightHost.Visible = true;
+                pnlRightHost.ResumeLayout();
+
+                updatePopupRegion();
+            };
+
+            Action openEmbed = () =>
+            {
+                Panel sub = BuildEmbedSubmenuPanel(rowEmbed);
+                showSubmenu(0, rowEmbed, sub, 0);
+            };
+
+            Action openParallel = () =>
+            {
+                Panel sub = BuildParallelSubmenuPanel(rowParallel, () => popup.Close());
+                showSubmenu(1, rowParallel, sub, 34);
+            };
+
+            Action openTurbo = () =>
+            {
+                Panel sub = BuildTurboSubmenuPanel(rowTurbo, () => popup.Close());
+                showSubmenu(2, rowTurbo, sub, 68);
+            };
+
+            rowEmbed.MouseEnter += (s, e) => openEmbed();
+            rowEmbed.MouseDown += (s, e) => openEmbed();
+
+            rowParallel.MouseEnter += (s, e) => openParallel();
+            rowParallel.MouseDown += (s, e) => openParallel();
+
+            rowTurbo.MouseEnter += (s, e) => openTurbo();
+            rowTurbo.MouseDown += (s, e) => openTurbo();
+
+            pnlLeft.Controls.Add(rowEmbed);
+            pnlLeft.Controls.Add(rowParallel);
+            pnlLeft.Controls.Add(rowTurbo);
+
+            rootContainer.Controls.Add(pnlLeft);
+            rootContainer.Controls.Add(pnlRightHost);
+
+            updatePopupRegion();
+
+            popup.Closed += (s, e) => selOptions.SetOpenState(false);
+            selOptions.SetOpenState(true);
+            popup.Show(selOptions, new Point(0, selOptions.Height + 2));
+        }
+
+        private Panel BuildEmbedSubmenuPanel(PopupMenuRow parentRow)
         {
             int width = 235;
             Panel container = new Panel
@@ -2260,7 +2449,9 @@ namespace MediaDownloader
                 rowMeta.IsSelected = settings.EmbedMetadata;
                 rowMeta.CheckGlyph = settings.EmbedMetadata ? "☑" : "☐";
                 rowMeta.Invalidate();
-                selEmbedTags.SetValueLabel(GetEmbedShortDisplayName());
+                parentRow.RightBadgeText = GetEmbedShortDisplayName() + "   ▸";
+                parentRow.Invalidate();
+                selOptions.SetValueLabel(GetOptionsSummaryLabel());
             };
 
             PopupMenuRow rowThumb = new PopupMenuRow(
@@ -2280,23 +2471,25 @@ namespace MediaDownloader
                 rowThumb.IsSelected = settings.EmbedThumbnail;
                 rowThumb.CheckGlyph = settings.EmbedThumbnail ? "☑" : "☐";
                 rowThumb.Invalidate();
-                selEmbedTags.SetValueLabel(GetEmbedShortDisplayName());
+                parentRow.RightBadgeText = GetEmbedShortDisplayName() + "   ▸";
+                parentRow.Invalidate();
+                selOptions.SetValueLabel(GetOptionsSummaryLabel());
             };
 
             container.Controls.Add(rowMeta);
             container.Controls.Add(rowThumb);
-
-            CreateDarkPopup(container, selEmbedTags);
+            return container;
         }
 
-        private void ShowParallelPopup()
+        private Panel BuildParallelSubmenuPanel(PopupMenuRow parentRow, Action closeAll)
         {
-            int width = 200;
+            int width = 190;
+            int rowH = 46;
             Panel container = new Panel
             {
                 BackColor = Theme.BgSurface,
                 Width = width,
-                Height = 6 * 34 + 8
+                Height = 6 * rowH + 8
             };
             container.Paint += (s, e) =>
             {
@@ -2306,28 +2499,88 @@ namespace MediaDownloader
                 }
             };
 
-            ToolStripDropDown popup = null;
             for (int n = 1; n <= 6; n++)
             {
                 int count = n;
                 bool active = (count == settings.ParallelCount);
                 string title = count + (count == 1 ? " Download" : " Downloads");
-                PopupMenuRow row = new PopupMenuRow(title, "Concurrent", null, active)
+                PopupMenuRow row = new PopupMenuRow(title, null, "Concurrent", active)
                 {
-                    Location = new Point(4, 4 + (n - 1) * 34),
+                    Location = new Point(4, 4 + (n - 1) * rowH),
                     Width = width - 8
                 };
                 row.MouseDown += (s, e) =>
                 {
                     settings.ParallelCount = count;
                     settings.Save();
-                    selParallel.SetValueLabel(count.ToString());
+                    parentRow.RightBadgeText = count + (count == 1 ? " Download   ▸" : " Downloads   ▸");
+                    parentRow.Invalidate();
+                    selOptions.SetValueLabel(GetOptionsSummaryLabel());
                     ProcessQueue();
-                    if (popup != null) popup.Close();
+                    if (closeAll != null) closeAll();
                 };
                 container.Controls.Add(row);
             }
-            popup = CreateDarkPopup(container, selParallel);
+            return container;
+        }
+
+        private Panel BuildTurboSubmenuPanel(PopupMenuRow parentRow, Action closeAll)
+        {
+            int[] counts = new int[] { 1, 4, 8, 12, 16 };
+            string[] titles = new string[]
+            {
+                "1x  (Standard)",
+                "4x  (Fast)",
+                "8x  (Turbo Default)",
+                "12x  (High Speed)",
+                "16x  (Maximum)"
+            };
+            string[] subTags = new string[]
+            {
+                "Single Stream",
+                "4 Connections",
+                "8 Connections",
+                "12 Connections",
+                "16 Connections"
+            };
+
+            int width = 210;
+            int rowH = 46;
+            Panel container = new Panel
+            {
+                BackColor = Theme.BgSurface,
+                Width = width,
+                Height = counts.Length * rowH + 8
+            };
+            container.Paint += (s, e) =>
+            {
+                using (Pen p = new Pen(Theme.BorderHover, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
+                }
+            };
+
+            for (int i = 0; i < counts.Length; i++)
+            {
+                int fragCount = counts[i];
+                bool active = (fragCount == settings.ConcurrentFragments);
+                PopupMenuRow row = new PopupMenuRow(titles[i], null, subTags[i], active)
+                {
+                    Location = new Point(4, 4 + i * rowH),
+                    Width = width - 8
+                };
+                row.MouseDown += (s, e) =>
+                {
+                    settings.ConcurrentFragments = fragCount;
+                    settings.Save();
+                    parentRow.RightBadgeText = fragCount + "x   ▸";
+                    parentRow.Invalidate();
+                    selOptions.SetValueLabel(GetOptionsSummaryLabel());
+                    if (closeAll != null) closeAll();
+                };
+                container.Controls.Add(row);
+            }
+            return container;
         }
 
         private void CheckToolsStatus()
@@ -2477,7 +2730,7 @@ namespace MediaDownloader
             });
         }
 
-        private string BuildBadgeLabel(DownloadMode mode, VideoResolution res, bool meta, bool thumb)
+        private string BuildBadgeLabel(DownloadMode mode, VideoResolution res, bool meta, bool thumb, int concurrentFragments)
         {
             string formatPart;
             bool isVideo = (mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv);
@@ -2511,6 +2764,11 @@ namespace MediaDownloader
             if (meta || thumb)
             {
                 formatPart += " • TAGS";
+            }
+
+            if (concurrentFragments > 1)
+            {
+                formatPart += " • " + concurrentFragments + "X";
             }
 
             return formatPart;
@@ -2566,7 +2824,8 @@ namespace MediaDownloader
             VideoResolution res = (VideoResolution)settings.QualityIndex;
             bool embedMeta = settings.EmbedMetadata;
             bool embedThumb = settings.EmbedThumbnail;
-            string badgeLabel = BuildBadgeLabel(mode, res, embedMeta, embedThumb);
+            int concurrentFragments = settings.ConcurrentFragments;
+            string badgeLabel = BuildBadgeLabel(mode, res, embedMeta, embedThumb, concurrentFragments);
 
             DownloadQueueItem item = new DownloadQueueItem(
                 rawInput,
@@ -2574,6 +2833,7 @@ namespace MediaDownloader
                 res,
                 embedMeta,
                 embedThumb,
+                concurrentFragments,
                 badgeLabel,
                 outFolder);
 
@@ -2751,6 +3011,12 @@ namespace MediaDownloader
 
             StringBuilder args = new StringBuilder();
             args.Append("--newline --no-colors --progress --no-playlist ");
+
+            // Multi-Connection Turbo Downloading: concurrent DASH/HLS fragments + chunked HTTP Range requests to bypass single-stream server throttling
+            if (item.ConcurrentFragments > 1)
+            {
+                args.AppendFormat("--concurrent-fragments {0} --buffer-size 16K --http-chunk-size 10M ", item.ConcurrentFragments);
+            }
 
             if (File.Exists(ffmpegPath))
             {
