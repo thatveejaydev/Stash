@@ -2,12 +2,50 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace MediaDownloader
 {
     // Persistent Settings (Remembers Save-To Directory History & User Preferences)
     public class AppSettings
     {
+        private const string DownloadsToken = "%DOWNLOADS%";
+
+        [DllImport("shell32.dll")]
+        private static extern int SHGetKnownFolderPath(ref Guid folderId, uint flags, IntPtr token, out IntPtr path);
+
+        public static string GetDownloadsFolder()
+        {
+            Guid downloadsId = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+            IntPtr path = IntPtr.Zero;
+            try
+            {
+                // Ask Windows, so redirected Downloads folders are respected too.
+                if (SHGetKnownFolderPath(ref downloadsId, 0, IntPtr.Zero, out path) == 0)
+                {
+                    string folder = Marshal.PtrToStringUni(path);
+                    if (!string.IsNullOrWhiteSpace(folder)) return folder;
+                }
+            }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            finally { if (path != IntPtr.Zero) Marshal.FreeCoTaskMem(path); }
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        }
+
+        private static string ResolveSavedFolder(string folder)
+        {
+            if (string.Equals(folder, DownloadsToken, StringComparison.OrdinalIgnoreCase))
+                return GetDownloadsFolder();
+            // Ignore stale paths copied from another computer.
+            return Path.IsPathRooted(folder) && Directory.Exists(folder) ? folder : null;
+        }
+
+        private static string SerializeFolder(string folder)
+        {
+            return string.Equals(folder.TrimEnd('\\', '/'), GetDownloadsFolder().TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)
+                ? DownloadsToken : folder;
+        }
         public string CurrentOutputFolder { get; set; }
         public List<string> RecentFolders { get; set; }
         public int FormatIndex { get; set; }
@@ -24,9 +62,7 @@ namespace MediaDownloader
 
         public AppSettings()
         {
-            string defaultDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            if (!Directory.Exists(defaultDownloads))
-                defaultDownloads = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+            string defaultDownloads = GetDownloadsFolder();
 
             CurrentOutputFolder = defaultDownloads;
             RecentFolders = new List<string> { defaultDownloads };
@@ -74,9 +110,7 @@ namespace MediaDownloader
 
             if (RecentFolders.Count == 0)
             {
-                string defaultDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                if (!Directory.Exists(defaultDownloads))
-                    defaultDownloads = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+                string defaultDownloads = GetDownloadsFolder();
                 RecentFolders.Add(defaultDownloads);
             }
 
@@ -94,7 +128,7 @@ namespace MediaDownloader
             try
             {
                 string path = GetSettingsPath();
-                if (!File.Exists(path)) return s;
+                if (!File.Exists(path)) { s.Save(); return s; }
 
                 List<string> loadedHistory = new List<string>();
                 foreach (string rawLine in File.ReadAllLines(path, Encoding.UTF8))
@@ -110,9 +144,12 @@ namespace MediaDownloader
                     int parsedInt;
                     bool parsedBool;
                     if (key == "CurrentOutputFolder" && !string.IsNullOrEmpty(val))
-                        s.CurrentOutputFolder = val;
+                        s.CurrentOutputFolder = ResolveSavedFolder(val) ?? GetDownloadsFolder();
                     else if (key == "RecentFolder" && !string.IsNullOrEmpty(val))
-                        loadedHistory.Add(val);
+                    {
+                        string folder = ResolveSavedFolder(val);
+                        if (folder != null) loadedHistory.Add(folder);
+                    }
                     else if (key == "FormatIndex" && int.TryParse(val, out parsedInt))
                         s.FormatIndex = Math.Max(0, Math.Min(4, parsedInt));
                     else if (key == "QualityIndex" && int.TryParse(val, out parsedInt))
@@ -142,7 +179,7 @@ namespace MediaDownloader
             try
             {
                 StringBuilder sb = new StringBuilder();
-                sb.AppendLine("CurrentOutputFolder=" + CurrentOutputFolder);
+                sb.AppendLine("CurrentOutputFolder=" + SerializeFolder(CurrentOutputFolder));
                 sb.AppendLine("FormatIndex=" + FormatIndex);
                 sb.AppendLine("QualityIndex=" + QualityIndex);
                 sb.AppendLine("EmbedMetadata=" + EmbedMetadata);
@@ -151,7 +188,7 @@ namespace MediaDownloader
                 sb.AppendLine("ConcurrentFragments=" + ConcurrentFragments);
                 foreach (string dir in RecentFolders)
                 {
-                    sb.AppendLine("RecentFolder=" + dir);
+                    sb.AppendLine("RecentFolder=" + SerializeFolder(dir));
                 }
                 File.WriteAllText(GetSettingsPath(), sb.ToString(), Encoding.UTF8);
             }
