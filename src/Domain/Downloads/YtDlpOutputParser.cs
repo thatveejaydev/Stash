@@ -14,6 +14,33 @@ namespace MediaDownloader
             @"\[(?:download|Merger|ExtractAudio)\]\s+(?:Destination:\s+|Merging formats into\s+""?)(?<path>[^""\r\n]+)""?",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        private static readonly Regex SpeedValueRegex = new Regex(
+            @"^(?<val>\d+(?:\.\d+)?)\s*(?<unit>[KMGTP]?i?B)/s$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static string FormatSpeedAsMbps(string rawSpeed)
+        {
+            if (string.IsNullOrWhiteSpace(rawSpeed)) return "—";
+            Match m = SpeedValueRegex.Match(rawSpeed.Trim());
+            if (!m.Success) return rawSpeed;
+
+            double val;
+            if (!double.TryParse(m.Groups["val"].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out val))
+                return rawSpeed;
+
+            string unit = m.Groups["unit"].Value.ToUpperInvariant();
+            double bytesPerSec = val;
+            if (unit == "KIB") bytesPerSec = val * 1024.0;
+            else if (unit == "KB") bytesPerSec = val * 1000.0;
+            else if (unit == "MIB") bytesPerSec = val * 1024.0 * 1024.0;
+            else if (unit == "MB") bytesPerSec = val * 1000.0 * 1000.0;
+            else if (unit == "GIB") bytesPerSec = val * 1024.0 * 1024.0 * 1024.0;
+            else if (unit == "GB") bytesPerSec = val * 1000.0 * 1000.0 * 1000.0;
+
+            double mbps = (bytesPerSec * 8.0) / 1000000.0;
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.0} Mbps", mbps);
+        }
+
         public static void ParseLine(DownloadQueueItem item, string line, Action onUiChanged, Action<string> onLogLine)
         {
             Match destMatch = DestinationRegex.Match(line);
@@ -71,7 +98,7 @@ namespace MediaDownloader
 
                 if (progMatch.Groups["speed"].Success && !string.IsNullOrWhiteSpace(progMatch.Groups["speed"].Value))
                 {
-                    item.Speed = progMatch.Groups["speed"].Value;
+                    item.Speed = FormatSpeedAsMbps(progMatch.Groups["speed"].Value);
                 }
 
                 if (progMatch.Groups["eta"].Success && !string.IsNullOrWhiteSpace(progMatch.Groups["eta"].Value))
