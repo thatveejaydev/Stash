@@ -13,7 +13,7 @@ namespace MediaDownloader
 
         public CardPanel()
         {
-            CornerRadius = 8;
+            CornerRadius = Dpi.Px(8);
             CardFillColor = Theme.BgSurface;
             CardBorderColor = Theme.BorderSubtle;
             BackColor = Color.Transparent;
@@ -31,7 +31,7 @@ namespace MediaDownloader
                 g.FillRectangle(clear, ClientRectangle);
             }
 
-            Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            Rectangle rect = new Rectangle(0, 0, Width - Dpi.Px(1), Height - Dpi.Px(1));
             using (GraphicsPath path = Theme.CreateRoundedRectangle(rect, CornerRadius))
             {
                 using (SolidBrush b = new SolidBrush(CardFillColor))

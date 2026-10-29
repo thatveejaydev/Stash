@@ -111,8 +111,19 @@ namespace MediaDownloader
             settings = AppSettings.Load();
             InitializePaths();
             InitializeUi();
+            FitInitialWindowToScreen();
             ApplyDarkTitleBar();
             CheckToolsStatus();
+        }
+
+        private void FitInitialWindowToScreen()
+        {
+            Rectangle area = Screen.FromControl(this).WorkingArea;
+            int availableWidth = Math.Max(1, area.Width - Dpi.Px(16));
+            int availableHeight = Math.Max(1, area.Height - Dpi.Px(16));
+            MinimumSize = new Size(Math.Min(MinimumSize.Width, availableWidth),
+                                   Math.Min(MinimumSize.Height, availableHeight));
+            Size = new Size(Math.Min(Width, availableWidth), Math.Min(Height, availableHeight));
         }
 
         private void ApplyDarkTitleBar()
@@ -183,9 +194,12 @@ namespace MediaDownloader
 
         private void InitializeUi()
         {
+            // Geometry is explicitly converted from 96-DPI units by Dpi.Px.
+            // Disable WinForms' additional automatic pass to avoid double scaling.
+            AutoScaleMode = AutoScaleMode.None;
             Text = "Stash";
-            Size = new Size(1020, 660);
-            MinimumSize = new Size(880, 520);
+            Size = new Size(Dpi.Px(1020), Dpi.Px(660));
+            MinimumSize = new Size(Dpi.Px(880), Dpi.Px(520));
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
             BackColor = Theme.BgWindow;
@@ -204,15 +218,15 @@ namespace MediaDownloader
             Panel pnlTopBar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 66,
-                Padding = new Padding(18, 13, 18, 13),
+                Height = Dpi.Px(66),
+                Padding = new Padding(Dpi.Px(18), Dpi.Px(13), Dpi.Px(18), Dpi.Px(13)),
                 BackColor = Theme.BgTopBar
             };
             pnlTopBar.Paint += (s, e) =>
             {
                 using (Pen borderPen = new Pen(Theme.BorderSubtle, 1f))
                 {
-                    e.Graphics.DrawLine(borderPen, 0, pnlTopBar.Height - 1, pnlTopBar.Width, pnlTopBar.Height - 1);
+                    e.Graphics.DrawLine(borderPen, 0, pnlTopBar.Height - Dpi.Px(1), pnlTopBar.Width, pnlTopBar.Height - Dpi.Px(1));
                 }
             };
 
@@ -233,7 +247,7 @@ namespace MediaDownloader
             // Purple "[Paste Link]" Hero Button
             btnPasteHero = new PasteLinkHeroButton
             {
-                Margin = new Padding(0, 0, 6, 0)
+                Margin = new Padding(0, 0, Dpi.Px(6), 0)
             };
             appToolTip.SetToolTip(btnPasteHero, "Paste link from clipboard & download immediately (Ctrl+V)");
             btnPasteHero.Click += (s, e) => PasteFromClipboardAndDownload();
@@ -242,28 +256,28 @@ namespace MediaDownloader
             toggleSmartMode = new CompactToggleSwitch
             {
                 Checked = true,
-                Margin = new Padding(0, 10, 10, 0)
+                Margin = new Padding(0, Dpi.Px(10), Dpi.Px(10), 0)
             };
             appToolTip.SetToolTip(toggleSmartMode, "Toggle quick format & quality selectors");
 
             // "Download  Video ⌄"
             selDownloadFormat = new InlineFlowSelector("Download", FormatShortNames[settings.FormatIndex])
             {
-                Margin = new Padding(0, 0, 8, 0)
+                Margin = new Padding(0, 0, Dpi.Px(8), 0)
             };
             selDownloadFormat.Clicked += (s, e) => ShowFormatPopup();
 
             // "Quality  Best ⌄"
             selQuality = new InlineFlowSelector("Quality", QualityShortNames[settings.QualityIndex])
             {
-                Margin = new Padding(0, 0, 8, 0)
+                Margin = new Padding(0, 0, Dpi.Px(8), 0)
             };
             selQuality.Clicked += (s, e) => ShowQualityPopup();
 
             // "Save to  Downloads ⌄"
             selSaveTo = new InlineFlowSelector("Save to", GetFolderShortDisplayName(settings.CurrentOutputFolder))
             {
-                Margin = new Padding(0, 0, 8, 0)
+                Margin = new Padding(0, 0, Dpi.Px(8), 0)
             };
             appToolTip.SetToolTip(selSaveTo, settings.CurrentOutputFolder);
             selSaveTo.Clicked += (s, e) => ShowSaveToHistoryPopup();
@@ -303,10 +317,10 @@ namespace MediaDownloader
             TableLayoutPanel pnlQueueBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 44,
+                Height = Dpi.Px(44),
                 ColumnCount = 3,
                 RowCount = 1,
-                Padding = new Padding(18, 8, 18, 4),
+                Padding = new Padding(Dpi.Px(18), Dpi.Px(8), Dpi.Px(18), Dpi.Px(4)),
                 BackColor = Theme.BgWindow
             };
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -329,7 +343,7 @@ namespace MediaDownloader
                 Anchor = AnchorStyles.Right,
                 Cursor = Cursors.Hand,
                 Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
-                Margin = new Padding(0, 0, 10, 0),
+                Margin = new Padding(0, 0, Dpi.Px(10), 0),
                 ForeColor = Theme.AccentWarning
             };
             lblToolsStatus.Click += BtnInstallTools_Click;
@@ -337,53 +351,53 @@ namespace MediaDownloader
             btnInstallTools = new ModernButton
             {
                 Text = "Install yt-dlp + FFmpeg",
-                Size = new Size(165, 27),
-                Margin = new Padding(0, 0, 8, 0),
+                Size = new Size(Dpi.Px(165), Dpi.Px(27)),
+                Margin = new Padding(0, 0, Dpi.Px(8), 0),
                 BaseColor = Theme.BrandPurple,
                 HoverColor = Theme.BrandPurpleHover,
                 Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
-                CornerRadius = 6
+                CornerRadius = Dpi.Px(6)
             };
             btnInstallTools.Click += BtnInstallTools_Click;
 
             btnCancelSelected = new ModernButton
             {
                 Text = "Cancel Selected",
-                Size = new Size(115, 27),
-                Margin = new Padding(0, 0, 8, 0),
+                Size = new Size(Dpi.Px(115), Dpi.Px(27)),
+                Margin = new Padding(0, 0, Dpi.Px(8), 0),
                 BaseColor = Color.FromArgb(46, 24, 28),
                 HoverColor = Color.FromArgb(64, 30, 36),
                 ForeColor = Color.FromArgb(252, 165, 165),
                 Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
-                CornerRadius = 6
+                CornerRadius = Dpi.Px(6)
             };
             btnCancelSelected.Click += BtnCancelSelected_Click;
 
             btnRemoveFinished = new ModernButton
             {
                 Text = "Clear Finished",
-                Size = new Size(106, 27),
-                Margin = new Padding(0, 0, 8, 0),
+                Size = new Size(Dpi.Px(106), Dpi.Px(27)),
+                Margin = new Padding(0, 0, Dpi.Px(8), 0),
                 BaseColor = Theme.BgSurface,
                 HoverColor = Theme.BgSurfaceHover,
                 BorderColor = Theme.BorderSubtle,
                 ForeColor = Theme.TextSecondary,
                 Font = new Font("Segoe UI", 8.5F),
-                CornerRadius = 6
+                CornerRadius = Dpi.Px(6)
             };
             btnRemoveFinished.Click += BtnRemoveFinished_Click;
 
             btnToggleLog = new ModernButton
             {
                 Text = "Console",
-                Size = new Size(98, 27),
+                Size = new Size(Dpi.Px(98), Dpi.Px(27)),
                 Margin = new Padding(0),
                 BaseColor = Theme.BgSurface,
                 HoverColor = Theme.BgSurfaceHover,
                 BorderColor = Theme.BorderSubtle,
                 ForeColor = Theme.TextSecondary,
                 Font = new Font("Segoe UI", 8.5F),
-                CornerRadius = 6
+                CornerRadius = Dpi.Px(6)
             };
             btnToggleLog.Click += (s, e) =>
             {
@@ -397,8 +411,8 @@ namespace MediaDownloader
 
             TableLayoutPanel statusBar = new TableLayoutPanel
             {
-                Dock = DockStyle.Bottom, Height = 38, ColumnCount = 5, RowCount = 1,
-                Padding = new Padding(20, 5, 18, 5), BackColor = Theme.BgTopBar
+                Dock = DockStyle.Bottom, Height = Dpi.Px(38), ColumnCount = 5, RowCount = 1,
+                Padding = new Padding(Dpi.Px(20), Dpi.Px(5), Dpi.Px(18), Dpi.Px(5)), BackColor = Theme.BgTopBar
             };
             statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -426,19 +440,19 @@ namespace MediaDownloader
             pnlBottomLog = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 125,
+                Height = Dpi.Px(125),
                 Visible = false,
-                Padding = new Padding(18, 6, 18, 14),
+                Padding = new Padding(Dpi.Px(18), Dpi.Px(6), Dpi.Px(18), Dpi.Px(14)),
                 BackColor = Theme.BgWindow
             };
 
             CardPanel cardLog = new CardPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(10, 8, 10, 8),
+                Padding = new Padding(Dpi.Px(10), Dpi.Px(8), Dpi.Px(10), Dpi.Px(8)),
                 CardFillColor = Color.FromArgb(14, 15, 19),
                 CardBorderColor = Theme.BorderSubtle,
-                CornerRadius = 8
+                CornerRadius = Dpi.Px(8)
             };
 
             txtLog = new RichTextBox
@@ -457,7 +471,7 @@ namespace MediaDownloader
             Panel pnlCenter = new Panel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(18, 4, 18, 6),
+                Padding = new Padding(Dpi.Px(18), Dpi.Px(4), Dpi.Px(18), Dpi.Px(6)),
                 BackColor = Theme.BgWindow
             };
 
@@ -507,25 +521,25 @@ namespace MediaDownloader
             popup.Items.Add(host);
             popup.Closed += (s, e) => ownerSelector.SetOpenState(false);
             ownerSelector.SetOpenState(true);
-            popup.Show(ownerSelector, new Point(0, ownerSelector.Height + 2));
+            popup.Show(ownerSelector, new Point(0, ownerSelector.Height + Dpi.Px(2)));
             return popup;
         }
 
         // Perfectly aligned Download Format dropdown with fixed left checkmark column and right-aligned detail tag
         private void ShowFormatPopup()
         {
-            int width = 265;
+            int width = Dpi.Px(265);
             Panel container = new Panel
             {
                 BackColor = Theme.BgSurface,
                 Width = width,
-                Height = FormatPopupTitles.Length * 34 + 8
+                Height = FormatPopupTitles.Length * Dpi.Px(34) + Dpi.Px(8)
             };
             container.Paint += (s, e) =>
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
                 }
             };
 
@@ -536,8 +550,8 @@ namespace MediaDownloader
                 bool active = (idx == settings.FormatIndex);
                 PopupMenuRow row = new PopupMenuRow(FormatPopupTitles[idx], FormatPopupRightTags[idx], null, active)
                 {
-                    Location = new Point(4, 4 + idx * 34),
-                    Width = width - 8
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + idx * Dpi.Px(34)),
+                    Width = width - Dpi.Px(8)
                 };
                 row.MouseDown += (s, e) =>
                 {
@@ -554,18 +568,18 @@ namespace MediaDownloader
 
         private void ShowQualityPopup()
         {
-            int width = 245;
+            int width = Dpi.Px(245);
             Panel container = new Panel
             {
                 BackColor = Theme.BgSurface,
                 Width = width,
-                Height = QualityPopupTitles.Length * 34 + 8
+                Height = QualityPopupTitles.Length * Dpi.Px(34) + Dpi.Px(8)
             };
             container.Paint += (s, e) =>
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
                 }
             };
 
@@ -576,8 +590,8 @@ namespace MediaDownloader
                 bool active = (idx == settings.QualityIndex);
                 PopupMenuRow row = new PopupMenuRow(QualityPopupTitles[idx], QualityPopupRightTags[idx], null, active)
                 {
-                    Location = new Point(4, 4 + idx * 34),
-                    Width = width - 8
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + idx * Dpi.Px(34)),
+                    Width = width - Dpi.Px(8)
                 };
                 row.MouseDown += (s, e) =>
                 {
@@ -594,10 +608,10 @@ namespace MediaDownloader
         // Save-to Dropdown: Folder Name on main line, full path in tiny text directly underneath, plus '✕' button to remove from list
         private void ShowSaveToHistoryPopup()
         {
-            int width = 325;
+            int width = Dpi.Px(325);
             int itemCount = settings.RecentFolders.Count;
-            int rowH = 46;
-            int totalHeight = (itemCount * rowH) + 46;
+            int rowH = Dpi.Px(46);
+            int totalHeight = (itemCount * rowH) + Dpi.Px(46);
 
             Panel container = new Panel
             {
@@ -609,9 +623,9 @@ namespace MediaDownloader
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
-                    int sepY = itemCount * rowH + 6;
-                    e.Graphics.DrawLine(p, 8, sepY, container.Width - 8, sepY);
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
+                    int sepY = itemCount * rowH + Dpi.Px(6);
+                    e.Graphics.DrawLine(p, Dpi.Px(8), sepY, container.Width - Dpi.Px(8), sepY);
                 }
             };
 
@@ -625,8 +639,8 @@ namespace MediaDownloader
 
                 PopupMenuRow row = new PopupMenuRow(leaf, null, folderPath, isCurrent)
                 {
-                    Location = new Point(4, 4 + i * rowH),
-                    Width = width - 8,
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + i * rowH),
+                    Width = width - Dpi.Px(8),
                     AllowRemove = true
                 };
                 row.MouseDown += (s, e) =>
@@ -648,8 +662,8 @@ namespace MediaDownloader
             // "Browse for folder..." row at bottom of popup
             PopupMenuRow browseRow = new PopupMenuRow("Browse for folder...", null, null, false, "")
             {
-                Location = new Point(4, itemCount * rowH + 9),
-                Width = width - 8,
+                Location = new Point(Dpi.Px(4), itemCount * rowH + Dpi.Px(9)),
+                Width = width - Dpi.Px(8),
                 TitleOverrideColor = Theme.BrandPurpleLight
             };
             browseRow.MouseDown += (s, e) =>
@@ -686,12 +700,12 @@ namespace MediaDownloader
         // Nested Dropdown containing "Embed", "Parallel", and "Turbo" submenus inside a single Region-shaped popup
         private void ShowOptionsNestedPopup()
         {
-            int leftWidth = 225;
-            int leftHeight = 3 * 34 + 8; // 110
-            int gap = 4;
-            int rightMaxWidth = 235;
+            int leftWidth = Dpi.Px(225);
+            int leftHeight = 3 * Dpi.Px(34) + Dpi.Px(8); // 110
+            int gap = Dpi.Px(4);
+            int rightMaxWidth = Dpi.Px(235);
             int totalWidth = leftWidth + gap + rightMaxWidth;
-            int totalHeight = 34 + (6 * 46 + 8) + 8; // Enough height for 6 two-line rows in Parallel & 5 in Turbo
+            int totalHeight = Dpi.Px(34) + (6 * Dpi.Px(46) + Dpi.Px(8)) + Dpi.Px(8); // Enough height for 6 two-line rows in Parallel & 5 in Turbo
 
             Panel rootContainer = new Panel
             {
@@ -711,7 +725,7 @@ namespace MediaDownloader
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, pnlLeft.Width - 1, pnlLeft.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlLeft.Width - Dpi.Px(1), pnlLeft.Height - Dpi.Px(1));
                 }
             };
 
@@ -720,7 +734,7 @@ namespace MediaDownloader
                 BackColor = Theme.BgSurface,
                 Location = new Point(0, 0),
                 Width = rightMaxWidth,
-                Height = 76,
+                Height = Dpi.Px(76),
                 Visible = false
             };
 
@@ -763,8 +777,8 @@ namespace MediaDownloader
                 false,
                 "")
             {
-                Location = new Point(4, 4),
-                Width = leftWidth - 8
+                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
+                Width = leftWidth - Dpi.Px(8)
             };
 
             PopupMenuRow rowParallel = new PopupMenuRow(
@@ -774,8 +788,8 @@ namespace MediaDownloader
                 false,
                 "")
             {
-                Location = new Point(4, 38),
-                Width = leftWidth - 8
+                Location = new Point(Dpi.Px(4), Dpi.Px(38)),
+                Width = leftWidth - Dpi.Px(8)
             };
 
             PopupMenuRow rowTurbo = new PopupMenuRow(
@@ -785,8 +799,8 @@ namespace MediaDownloader
                 false,
                 "")
             {
-                Location = new Point(4, 72),
-                Width = leftWidth - 8
+                Location = new Point(Dpi.Px(4), Dpi.Px(72)),
+                Width = leftWidth - Dpi.Px(8)
             };
 
             int currentSubmenuIndex = -1;
@@ -853,23 +867,23 @@ namespace MediaDownloader
 
             popup.Closed += (s, e) => selOptions.SetOpenState(false);
             selOptions.SetOpenState(true);
-            popup.Show(selOptions, new Point(selOptions.Width - popup.Width, selOptions.Height + 2));
+            popup.Show(selOptions, new Point(selOptions.Width - popup.Width, selOptions.Height + Dpi.Px(2)));
         }
 
         private Panel BuildEmbedSubmenuPanel(PopupMenuRow parentRow)
         {
-            int width = 235;
+            int width = Dpi.Px(235);
             Panel container = new Panel
             {
                 BackColor = Theme.BgSurface,
                 Width = width,
-                Height = 76
+                Height = Dpi.Px(76)
             };
             container.Paint += (s, e) =>
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
                 }
             };
 
@@ -880,8 +894,8 @@ namespace MediaDownloader
                 settings.EmbedMetadata,
                 settings.EmbedMetadata ? "☑" : "☐")
             {
-                Location = new Point(4, 4),
-                Width = width - 8
+                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
+                Width = width - Dpi.Px(8)
             };
             rowMeta.MouseDown += (s, e) =>
             {
@@ -902,8 +916,8 @@ namespace MediaDownloader
                 settings.EmbedThumbnail,
                 settings.EmbedThumbnail ? "☑" : "☐")
             {
-                Location = new Point(4, 38),
-                Width = width - 8
+                Location = new Point(Dpi.Px(4), Dpi.Px(38)),
+                Width = width - Dpi.Px(8)
             };
             rowThumb.MouseDown += (s, e) =>
             {
@@ -924,19 +938,19 @@ namespace MediaDownloader
 
         private Panel BuildParallelSubmenuPanel(PopupMenuRow parentRow, Action closeAll)
         {
-            int width = 190;
-            int rowH = 46;
+            int width = Dpi.Px(190);
+            int rowH = Dpi.Px(46);
             Panel container = new Panel
             {
                 BackColor = Theme.BgSurface,
                 Width = width,
-                Height = 6 * rowH + 8
+                Height = 6 * rowH + Dpi.Px(8)
             };
             container.Paint += (s, e) =>
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
                 }
             };
 
@@ -947,8 +961,8 @@ namespace MediaDownloader
                 string title = count + (count == 1 ? " Download" : " Downloads");
                 PopupMenuRow row = new PopupMenuRow(title, null, "Concurrent", active)
                 {
-                    Location = new Point(4, 4 + (n - 1) * rowH),
-                    Width = width - 8
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + (n - 1) * rowH),
+                    Width = width - Dpi.Px(8)
                 };
                 row.MouseDown += (s, e) =>
                 {
@@ -985,19 +999,19 @@ namespace MediaDownloader
                 "16 Connections"
             };
 
-            int width = 210;
-            int rowH = 46;
+            int width = Dpi.Px(210);
+            int rowH = Dpi.Px(46);
             Panel container = new Panel
             {
                 BackColor = Theme.BgSurface,
                 Width = width,
-                Height = counts.Length * rowH + 8
+                Height = counts.Length * rowH + Dpi.Px(8)
             };
             container.Paint += (s, e) =>
             {
                 using (Pen p = new Pen(Theme.BorderHover, 1f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - 1, container.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
                 }
             };
 
@@ -1007,8 +1021,8 @@ namespace MediaDownloader
                 bool active = (fragCount == settings.ConcurrentFragments);
                 PopupMenuRow row = new PopupMenuRow(titles[i], null, subTags[i], active)
                 {
-                    Location = new Point(4, 4 + i * rowH),
-                    Width = width - 8
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + i * rowH),
+                    Width = width - Dpi.Px(8)
                 };
                 row.MouseDown += (s, e) =>
                 {

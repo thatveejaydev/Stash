@@ -27,17 +27,17 @@ namespace MediaDownloader
         }
         public DarkScrollBar()
         {
-            Width = 10; SmallChange = 30; BackColor = Theme.BgWindow;
+            Width = Dpi.Px(10); SmallChange = Dpi.Px(30); BackColor = Theme.BgWindow;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
         private Rectangle Thumb
         {
             get
             {
-                int track = Math.Max(1, Height - 4);
-                int height = Math.Min(track, Math.Max(24, (int)((double)track * largeChange / Math.Max(largeChange, maximum + 1))));
-                int y = 2 + (Limit == 0 ? 0 : (int)((double)current / Limit * (track - height)));
-                return new Rectangle(2, y, Math.Max(1, Width - 4), height);
+                int track = Math.Max(Dpi.Px(1), Height - Dpi.Px(4));
+                int height = Math.Min(track, Math.Max(Dpi.Px(24), (int)((double)track * largeChange / Math.Max(largeChange, maximum + 1))));
+                int y = Dpi.Px(2) + (Limit == 0 ? 0 : (int)((double)current / Limit * (track - height)));
+                return new Rectangle(Dpi.Px(2), y, Math.Max(Dpi.Px(1), Width - Dpi.Px(4)), height);
             }
         }
         protected override void OnPaint(PaintEventArgs e)
@@ -60,8 +60,8 @@ namespace MediaDownloader
             base.OnMouseMove(e);
             if (dragOffset >= 0)
             {
-                int travel = Height - 4 - Thumb.Height;
-                if (travel > 0) Value = (int)((double)(e.Y - dragOffset - 2) * Limit / travel);
+                int travel = Height - Dpi.Px(4) - Thumb.Height;
+                if (travel > 0) Value = (int)((double)(e.Y - dragOffset - Dpi.Px(2)) * Limit / travel);
             }
             hovered = true; Invalidate();
         }

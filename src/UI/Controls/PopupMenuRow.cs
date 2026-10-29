@@ -31,14 +31,14 @@ namespace MediaDownloader
             CheckGlyph = checkGlyph;
             TitleOverrideColor = Color.Empty;
             AllowRemove = false;
-            Height = string.IsNullOrEmpty(subText) ? 34 : 46;
+            Height = string.IsNullOrEmpty(subText) ? Dpi.Px(34) : Dpi.Px(46);
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
 
         private Rectangle GetRemoveButtonRect()
         {
-            return new Rectangle(Width - 32, (Height - 24) / 2, 24, 24);
+            return new Rectangle(Width - Dpi.Px(32), (Height - Dpi.Px(24)) / 2, Dpi.Px(24), Dpi.Px(24));
         }
 
         protected override void OnMouseEnter(EventArgs e)
@@ -104,21 +104,21 @@ namespace MediaDownloader
             {
                 using (Font fCheck = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold))
                 {
-                    Rectangle rCheck = new Rectangle(6, 0, 22, string.IsNullOrEmpty(SubText) ? Height : 24);
-                    if (!string.IsNullOrEmpty(SubText)) rCheck.Y = 4;
+                    Rectangle rCheck = new Rectangle(Dpi.Px(6), 0, Dpi.Px(22), string.IsNullOrEmpty(SubText) ? Height : Dpi.Px(24));
+                    if (!string.IsNullOrEmpty(SubText)) rCheck.Y = Dpi.Px(4);
                     TextRenderer.DrawText(g, CheckGlyph, fCheck, rCheck,
                         IsSelected ? Theme.BrandPurpleLight : Theme.TextMuted,
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 }
             }
 
-            int contentLeft = string.IsNullOrEmpty(CheckGlyph) ? 14 : 32;
-            int rightMargin = AllowRemove ? 38 : 10;
+            int contentLeft = string.IsNullOrEmpty(CheckGlyph) ? Dpi.Px(14) : Dpi.Px(32);
+            int rightMargin = AllowRemove ? Dpi.Px(38) : Dpi.Px(10);
 
             if (string.IsNullOrEmpty(SubText))
             {
                 // Single-line mode with optional right-aligned detail badge
-                int rightReserve = string.IsNullOrEmpty(RightBadgeText) ? rightMargin : 120;
+                int rightReserve = string.IsNullOrEmpty(RightBadgeText) ? rightMargin : Dpi.Px(120);
                 Rectangle rTitle = new Rectangle(contentLeft, 0, Width - contentLeft - rightReserve, Height);
                 using (Font fTitle = new Font("Segoe UI", 9.2F, IsSelected ? FontStyle.Bold : FontStyle.Regular))
                 {
@@ -128,7 +128,7 @@ namespace MediaDownloader
 
                 if (!string.IsNullOrEmpty(RightBadgeText))
                 {
-                    Rectangle rRight = new Rectangle(Width - 125, 0, 115, Height);
+                    Rectangle rRight = new Rectangle(Width - Dpi.Px(125), 0, Dpi.Px(115), Height);
                     using (Font fSub = new Font("Segoe UI", 8.2F, FontStyle.Regular))
                     {
                         TextRenderer.DrawText(g, RightBadgeText, fSub, rRight, Theme.TextMuted,
@@ -139,14 +139,14 @@ namespace MediaDownloader
             else
             {
                 // Two-line mode: Title on top, smaller muted subtext directly underneath
-                Rectangle rTitle = new Rectangle(contentLeft, 4, Width - contentLeft - rightMargin, 20);
+                Rectangle rTitle = new Rectangle(contentLeft, Dpi.Px(4), Width - contentLeft - rightMargin, Dpi.Px(20));
                 using (Font fTitle = new Font("Segoe UI", 9.2F, (IsSelected || AllowRemove) ? FontStyle.Bold : FontStyle.Regular))
                 {
                     TextRenderer.DrawText(g, TitleText, fTitle, rTitle, mainColor,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 }
 
-                Rectangle rSub = new Rectangle(contentLeft, 23, Width - contentLeft - rightMargin, 17);
+                Rectangle rSub = new Rectangle(contentLeft, Dpi.Px(23), Width - contentLeft - rightMargin, Dpi.Px(17));
                 using (Font fTiny = new Font("Segoe UI", 7.3F, FontStyle.Regular))
                 {
                     TextRenderer.DrawText(g, SubText, fTiny, rSub, Theme.TextMuted,

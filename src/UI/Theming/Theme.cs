@@ -53,9 +53,9 @@ namespace MediaDownloader
             {
                 Point[] pts = new Point[]
                 {
-                    new Point(center.X - 5, center.Y - 2),
-                    new Point(center.X, center.Y + 3),
-                    new Point(center.X + 5, center.Y - 2)
+                    new Point(center.X - Dpi.Px(5), center.Y - Dpi.Px(2)),
+                    new Point(center.X, center.Y + Dpi.Px(3)),
+                    new Point(center.X + Dpi.Px(5), center.Y - Dpi.Px(2))
                 };
                 g.DrawLines(p, pts);
             }

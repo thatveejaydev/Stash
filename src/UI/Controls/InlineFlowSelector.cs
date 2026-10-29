@@ -26,7 +26,7 @@ namespace MediaDownloader
         {
             PrefixLabel = prefix;
             ValueLabel = initialValue;
-            Height = 40;
+            Height = Dpi.Px(40);
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             RecalculateWidth();
@@ -47,12 +47,12 @@ namespace MediaDownloader
 
         public void RecalculateWidth()
         {
-            if (IconOnly) { Width = 40; return; }
+            if (IconOnly) { Width = Dpi.Px(40); return; }
             using (Font fPrefix = new Font("Segoe UI", 10F, FontStyle.Regular))
             using (Font fValue = new Font("Segoe UI Semibold", 10F, FontStyle.Bold))
             {
                 string label = PrefixLabel == "Quality" && ValueLabel == "Best" ? "Best quality" : ValueLabel;
-                Width = TextRenderer.MeasureText(label, fValue).Width + 60;
+                Width = TextRenderer.MeasureText(label, fValue).Width + Dpi.Px(60);
             }
         }
 
@@ -93,7 +93,7 @@ namespace MediaDownloader
 
             if ((isHovered || isOpen) && Enabled)
             {
-                Rectangle pill = new Rectangle(0, 2, Width - 1, Height - 4);
+                Rectangle pill = new Rectangle(0, Dpi.Px(2), Width - Dpi.Px(1), Height - Dpi.Px(4));
                 using (GraphicsPath path = Theme.CreateRoundedRectangle(pill, 6))
                 using (SolidBrush hb = new SolidBrush(Color.FromArgb(38, 42, 52)))
                 {
@@ -105,7 +105,7 @@ namespace MediaDownloader
             if (!string.IsNullOrEmpty(PrefixLabel))
             {
                 using (Pen separator = new Pen(Theme.BorderSubtle))
-                    g.DrawLine(separator, Width - 1, 12, Width - 1, Height - 12);
+                    g.DrawLine(separator, Width - Dpi.Px(1), Dpi.Px(12), Width - Dpi.Px(1), Height - Dpi.Px(12));
             }
 
             using (Font fPrefix = new Font("Segoe UI", 10F, FontStyle.Regular))
@@ -116,25 +116,25 @@ namespace MediaDownloader
                 {
                     int cy = Height / 2;
                     GraphicsState iconState = g.Save();
-                    g.TranslateTransform(20, cy);
+                    g.TranslateTransform(Dpi.Px(20), cy);
                     g.ScaleTransform(0.8f, 0.8f);
-                    g.TranslateTransform(-20, -cy);
+                    g.TranslateTransform(-Dpi.Px(20), -cy);
                     if (PrefixLabel == "Download")
                     {
-                        g.DrawRectangle(icon, 12, cy - 5, 11, 10);
-                        g.DrawLines(icon, new Point[] { new Point(23, cy - 2), new Point(28, cy - 5), new Point(28, cy + 5), new Point(23, cy + 2) });
+                        g.DrawRectangle(icon, Dpi.Px(12), cy - Dpi.Px(5), Dpi.Px(11), Dpi.Px(10));
+                        g.DrawLines(icon, new Point[] { new Point(Dpi.Px(23), cy - Dpi.Px(2)), new Point(Dpi.Px(28), cy - Dpi.Px(5)), new Point(Dpi.Px(28), cy + Dpi.Px(5)), new Point(Dpi.Px(23), cy + Dpi.Px(2)) });
                     }
                     else if (PrefixLabel == "Save to")
                     {
-                        g.DrawLines(icon, new Point[] { new Point(12, cy + 5), new Point(12, cy - 5), new Point(18, cy - 5), new Point(21, cy - 2), new Point(27, cy - 2), new Point(27, cy + 5), new Point(12, cy + 5) });
+                        g.DrawLines(icon, new Point[] { new Point(Dpi.Px(12), cy + Dpi.Px(5)), new Point(Dpi.Px(12), cy - Dpi.Px(5)), new Point(Dpi.Px(18), cy - Dpi.Px(5)), new Point(Dpi.Px(21), cy - Dpi.Px(2)), new Point(Dpi.Px(27), cy - Dpi.Px(2)), new Point(Dpi.Px(27), cy + Dpi.Px(5)), new Point(Dpi.Px(12), cy + Dpi.Px(5)) });
                     }
                     else if (PrefixLabel == "Quality")
                     {
                         for (int i = 0; i < 3; i++)
                         {
-                            int y = cy - 5 + i * 5;
-                            g.DrawLine(icon, 12, y, 27, y);
-                            g.DrawRectangle(icon, i == 1 ? 21 : 15, y - 2, 3, 4);
+                            int y = cy - Dpi.Px(5) + i * Dpi.Px(5);
+                            g.DrawLine(icon, Dpi.Px(12), y, Dpi.Px(27), y);
+                            g.DrawRectangle(icon, i == 1 ? Dpi.Px(21) : Dpi.Px(15), y - Dpi.Px(2), Dpi.Px(3), Dpi.Px(4));
                         }
                     }
                     else
@@ -143,25 +143,25 @@ namespace MediaDownloader
                         for (int i = 0; i < gear.Length; i++)
                         {
                             double angle = i * Math.PI * 2 / gear.Length;
-                            float radius = i % 4 == 0 || i % 4 == 3 ? 7.5f : 5.8f;
-                            gear[i] = new PointF(20 + radius * (float)Math.Cos(angle), cy + radius * (float)Math.Sin(angle));
+                            float radius = i % 4 == 0 || i % 4 == 3 ? Dpi.Px(7.5f) : Dpi.Px(5.8f);
+                            gear[i] = new PointF(Dpi.Px(20) + radius * (float)Math.Cos(angle), cy + radius * (float)Math.Sin(angle));
                         }
                         g.DrawPolygon(icon, gear);
-                        g.DrawEllipse(icon, 17.5f, cy - 2.5f, 5, 5);
+                        g.DrawEllipse(icon, Dpi.Px(17.5f), cy - Dpi.Px(2.5f), Dpi.Px(5), Dpi.Px(5));
                     }
                     g.Restore(iconState);
                 }
                 if (IconOnly) return;
-                int x = 35;
+                int x = Dpi.Px(35);
                 string label = PrefixLabel == "Quality" && ValueLabel == "Best" ? "Best quality" : ValueLabel;
-                Size sVal = TextRenderer.MeasureText(g, label, fValue, new Size(500, Height), TextFormatFlags.NoPadding);
+                Size sVal = TextRenderer.MeasureText(g, label, fValue, new Size(Dpi.Px(500), Height), TextFormatFlags.NoPadding);
                 Rectangle rVal = new Rectangle(x, 0, sVal.Width, Height);
                 TextRenderer.DrawText(g, label, fValue, rVal,
                     Enabled ? Theme.TextPrimary : Theme.TextMuted,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                x += sVal.Width + 11;
+                x += sVal.Width + Dpi.Px(11);
 
-                Theme.DrawChevronDown(g, new Point(x, Height / 2 + 1),
+                Theme.DrawChevronDown(g, new Point(x, Height / 2 + Dpi.Px(1)),
                     Enabled ? Theme.TextSecondary : Theme.TextMuted);
             }
         }

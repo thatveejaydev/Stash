@@ -14,8 +14,8 @@ namespace MediaDownloader
         public DownloadQueueItem SelectedItem { get; private set; }
         private DownloadQueueItem hoveredItem = null;
         private DarkScrollBar scrollBar;
-        private const int RowHeight = 112;
-        private const int RowGap = 10;
+        private static readonly int RowHeight = Dpi.Px(112);
+        private static readonly int RowGap = Dpi.Px(10);
 
         public event EventHandler SelectionChanged;
         public event Action<DownloadQueueItem> PauseResumeRequested;
@@ -66,7 +66,7 @@ namespace MediaDownloader
 
         private void UpdateScrollBar()
         {
-            int totalHeight = 8;
+            int totalHeight = Dpi.Px(8);
             foreach (DownloadQueueItem item in items) totalHeight += GetRowHeight(item) + RowGap;
             if (totalHeight > ClientSize.Height && ClientSize.Height > 0)
             {
@@ -183,20 +183,20 @@ namespace MediaDownloader
 
         private int GetRowHeight(DownloadQueueItem item)
         {
-            return item.Status == QueueItemStatus.Completed ? 64 : RowHeight;
+            return item.Status == QueueItemStatus.Completed ? Dpi.Px(64) : RowHeight;
         }
 
         private DownloadQueueItem HitTestItemDetailed(Point pt, out int hitIndex, out Rectangle hitRect)
         {
             hitIndex = -1;
             hitRect = Rectangle.Empty;
-            int yOffset = -scrollBar.Value + 4;
-            int rightPad = scrollBar.Visible ? scrollBar.Width + 6 : 2;
-            int width = ClientSize.Width - rightPad - 2;
+            int yOffset = -scrollBar.Value + Dpi.Px(4);
+            int rightPad = scrollBar.Visible ? scrollBar.Width + Dpi.Px(6) : Dpi.Px(2);
+            int width = ClientSize.Width - rightPad - Dpi.Px(2);
 
             for (int i = 0; i < items.Count; i++)
             {
-                Rectangle r = new Rectangle(2, yOffset, width, GetRowHeight(items[i]));
+                Rectangle r = new Rectangle(Dpi.Px(2), yOffset, width, GetRowHeight(items[i]));
                 yOffset += r.Height + RowGap;
                 if (r.Contains(pt))
                 {
@@ -210,12 +210,12 @@ namespace MediaDownloader
 
         private Rectangle GetPauseResumeButtonRect(Rectangle rowRect)
         {
-            return new Rectangle(rowRect.Right - 102, rowRect.Bottom - 38, 26, 26);
+            return new Rectangle(rowRect.Right - Dpi.Px(102), rowRect.Bottom - Dpi.Px(38), Dpi.Px(26), Dpi.Px(26));
         }
 
         private Rectangle GetActionButtonRect(Rectangle rowRect)
         {
-            return new Rectangle(rowRect.Right - 38, rowRect.Height == 64 ? rowRect.Y + 19 : rowRect.Bottom - 38, 26, 26);
+            return new Rectangle(rowRect.Right - Dpi.Px(38), rowRect.Height == Dpi.Px(64) ? rowRect.Y + Dpi.Px(19) : rowRect.Bottom - Dpi.Px(38), Dpi.Px(26), Dpi.Px(26));
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -236,13 +236,13 @@ namespace MediaDownloader
                 return;
             }
 
-            int yOffset = -scrollBar.Value + 4;
-            int rightPad = scrollBar.Visible ? scrollBar.Width + 6 : 2;
-            int width = ClientSize.Width - rightPad - 2;
+            int yOffset = -scrollBar.Value + Dpi.Px(4);
+            int rightPad = scrollBar.Visible ? scrollBar.Width + Dpi.Px(6) : Dpi.Px(2);
+            int width = ClientSize.Width - rightPad - Dpi.Px(2);
 
             for (int i = 0; i < items.Count; i++)
             {
-                Rectangle rowRect = new Rectangle(2, yOffset, width, GetRowHeight(items[i]));
+                Rectangle rowRect = new Rectangle(Dpi.Px(2), yOffset, width, GetRowHeight(items[i]));
                 yOffset += rowRect.Height + RowGap;
                 if (rowRect.Bottom < 0 || rowRect.Top > ClientSize.Height) continue;
                 DrawQueueCard(g, items[i], rowRect);
@@ -258,9 +258,9 @@ namespace MediaDownloader
             using (Font fSub = new Font("Segoe UI", 9.5F, FontStyle.Regular))
             using (Font fCredit = new Font("Segoe UI", 8.5F, FontStyle.Regular))
             {
-                Rectangle r1 = new Rectangle(0, ClientSize.Height / 2 - 36, ClientSize.Width, 26);
-                Rectangle r2 = new Rectangle(0, ClientSize.Height / 2 - 8, ClientSize.Width, 24);
-                Rectangle r3 = new Rectangle(0, ClientSize.Height / 2 + 18, ClientSize.Width, 22);
+                Rectangle r1 = new Rectangle(0, ClientSize.Height / 2 - Dpi.Px(36), ClientSize.Width, Dpi.Px(26));
+                Rectangle r2 = new Rectangle(0, ClientSize.Height / 2 - Dpi.Px(8), ClientSize.Width, Dpi.Px(24));
+                Rectangle r3 = new Rectangle(0, ClientSize.Height / 2 + Dpi.Px(18), ClientSize.Width, Dpi.Px(22));
                 TextRenderer.DrawText(g, title, fTitle, r1, Theme.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 TextRenderer.DrawText(g, sub, fSub, r2, Theme.TextMuted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 TextRenderer.DrawText(g, credit, fCredit, r3, Color.FromArgb(92, 98, 114), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -298,7 +298,7 @@ namespace MediaDownloader
             else if (item.Status == QueueItemStatus.Queued) statusColor = Theme.TextMuted;
 
             // Left Accent Pill Indicator
-            Rectangle indicatorRect = new Rectangle(rect.X + 10, rect.Y + 12, 4, rect.Height - 24);
+            Rectangle indicatorRect = new Rectangle(rect.X + Dpi.Px(10), rect.Y + Dpi.Px(12), Dpi.Px(4), rect.Height - Dpi.Px(24));
             using (GraphicsPath indPath = Theme.CreateRoundedRectangle(indicatorRect, 2))
             using (SolidBrush indBrush = new SolidBrush(statusColor))
             {
@@ -313,7 +313,7 @@ namespace MediaDownloader
             using (Font fBadge = new Font("Segoe UI Semibold", 7.8F, FontStyle.Bold))
             {
                 Size badgeSize = TextRenderer.MeasureText(badgeText, fBadge);
-                Rectangle badgeRect = new Rectangle(rect.X + 24, rect.Y + 11, badgeSize.Width + 10, 19);
+                Rectangle badgeRect = new Rectangle(rect.X + Dpi.Px(24), rect.Y + Dpi.Px(11), badgeSize.Width + Dpi.Px(10), Dpi.Px(19));
                 using (GraphicsPath bp = Theme.CreateRoundedRectangle(badgeRect, 4))
                 using (SolidBrush bb = new SolidBrush(Color.FromArgb(42, 38, 62)))
                 {
@@ -325,7 +325,7 @@ namespace MediaDownloader
                 // Title
                 int titleLeft = badgeRect.Right + 10;
                 int titleWidth = Math.Max(80, rect.Width - titleLeft - (rightControlsReserve + 210));
-                Rectangle titleRect = new Rectangle(titleLeft, rect.Y + 9, titleWidth, 22);
+                Rectangle titleRect = new Rectangle(titleLeft, rect.Y + Dpi.Px(9), titleWidth, Dpi.Px(22));
                 using (Font fTitle = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold))
                 {
                     TextRenderer.DrawText(g, item.Title, fTitle, titleRect, Theme.TextPrimary,
@@ -348,7 +348,7 @@ namespace MediaDownloader
                 telemetryText = "Completed  •  100%";
             }
 
-            Rectangle statusRect = new Rectangle(rect.Right - rightControlsReserve - 208, rect.Y + 10, 204, 20);
+            Rectangle statusRect = new Rectangle(rect.Right - rightControlsReserve - Dpi.Px(208), rect.Y + Dpi.Px(10), Dpi.Px(204), Dpi.Px(20));
             using (Font fStatus = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold))
             {
                 TextRenderer.DrawText(g, telemetryText, fStatus, statusRect, statusColor,
@@ -356,7 +356,7 @@ namespace MediaDownloader
             }
 
             // Bottom Sleek Progress Bar Track
-            Rectangle trackRect = new Rectangle(rect.X + 24, rect.Bottom - 16, rect.Width - 24 - rightControlsReserve, 6);
+            Rectangle trackRect = new Rectangle(rect.X + Dpi.Px(24), rect.Bottom - Dpi.Px(16), rect.Width - Dpi.Px(24) - rightControlsReserve, Dpi.Px(6));
             using (GraphicsPath tp = Theme.CreateRoundedRectangle(trackRect, 3))
             using (SolidBrush tb = new SolidBrush(Color.FromArgb(16, 18, 22)))
             {
@@ -398,9 +398,9 @@ namespace MediaDownloader
                         // Crisp Play / Resume Triangle (▶)
                         Point[] tri = new Point[]
                         {
-                            new Point(cx - 3, cy - 5),
-                            new Point(cx - 3, cy + 5),
-                            new Point(cx + 5, cy)
+                            new Point(cx - Dpi.Px(3), cy - Dpi.Px(5)),
+                            new Point(cx - Dpi.Px(3), cy + Dpi.Px(5)),
+                            new Point(cx + Dpi.Px(5), cy)
                         };
                         g.FillPolygon(ib, tri);
                     }

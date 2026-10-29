@@ -14,7 +14,7 @@ namespace MediaDownloader
 
         public PasteLinkHeroButton()
         {
-            Size = new Size(112, 40);
+            Size = new Size(Dpi.Px(112), Dpi.Px(40));
             Cursor = Cursors.Hand;
             Font = new Font("Segoe UI Semibold", 10.2F, FontStyle.Bold);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -61,7 +61,7 @@ namespace MediaDownloader
                 g.FillRectangle(clear, ClientRectangle);
             }
 
-            Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            Rectangle rect = new Rectangle(0, 0, Width - Dpi.Px(1), Height - Dpi.Px(1));
             Color fill = isPressed ? Theme.BrandPurplePress : (isHovered ? Theme.BrandPurpleHover : Theme.BrandPurple);
 
             using (GraphicsPath path = Theme.CreateRoundedRectangle(rect, 6))
@@ -78,7 +78,7 @@ namespace MediaDownloader
         private void DrawClipboardPasteIcon(Graphics g, Point center, Color fg, Color bg)
         {
             // Crisp Clipboard + Down Arrow icon
-            Rectangle boardRect = new Rectangle(center.X - 6, center.Y - 6, 12, 14);
+            Rectangle boardRect = new Rectangle(center.X - Dpi.Px(6), center.Y - Dpi.Px(6), Dpi.Px(12), Dpi.Px(14));
             using (Pen p = new Pen(fg, 1.6f))
             using (GraphicsPath boardPath = Theme.CreateRoundedRectangle(boardRect, 2))
             {
@@ -86,12 +86,12 @@ namespace MediaDownloader
             }
 
             // Top clip tab
-            Rectangle clipClear = new Rectangle(center.X - 4, center.Y - 8, 8, 4);
+            Rectangle clipClear = new Rectangle(center.X - Dpi.Px(4), center.Y - Dpi.Px(8), Dpi.Px(8), Dpi.Px(4));
             using (SolidBrush clearBrush = new SolidBrush(bg))
             {
                 g.FillRectangle(clearBrush, clipClear);
             }
-            Rectangle clipRect = new Rectangle(center.X - 3, center.Y - 8, 6, 3);
+            Rectangle clipRect = new Rectangle(center.X - Dpi.Px(3), center.Y - Dpi.Px(8), Dpi.Px(6), Dpi.Px(3));
             using (Pen p = new Pen(fg, 1.5f))
             using (GraphicsPath clipPath = Theme.CreateRoundedRectangle(clipRect, 1))
             {
@@ -107,8 +107,8 @@ namespace MediaDownloader
                 int topY = center.Y - 2;
                 int botY = center.Y + 4;
                 g.DrawLine(arrowPen, ax, topY, ax, botY);
-                g.DrawLine(arrowPen, ax - 2, botY - 2, ax, botY);
-                g.DrawLine(arrowPen, ax + 2, botY - 2, ax, botY);
+                g.DrawLine(arrowPen, ax - Dpi.Px(2), botY - Dpi.Px(2), ax, botY);
+                g.DrawLine(arrowPen, ax + Dpi.Px(2), botY - Dpi.Px(2), ax, botY);
             }
         }
     }

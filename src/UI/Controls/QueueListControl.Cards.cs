@@ -9,7 +9,7 @@ namespace MediaDownloader
     {
         private Rectangle GetFolderButtonRect(Rectangle rect)
         {
-            return new Rectangle(rect.Right - (rect.Height == 64 ? 38 : 70), rect.Height == 64 ? rect.Y + 19 : rect.Bottom - 38, 26, 26);
+            return new Rectangle(rect.Right - (rect.Height == Dpi.Px(64) ? Dpi.Px(38) : Dpi.Px(70)), rect.Height == Dpi.Px(64) ? rect.Y + Dpi.Px(19) : rect.Bottom - Dpi.Px(38), Dpi.Px(26), Dpi.Px(26));
         }
 
         private void DrawQueueCard(Graphics g, DownloadQueueItem item, Rectangle rect)
@@ -24,7 +24,7 @@ namespace MediaDownloader
             }
 
             // A media tile reserves the reference layout's artwork area without inventing a thumbnail.
-            Rectangle tile = new Rectangle(rect.X + 12, rect.Y + 12, 40, 40);
+            Rectangle tile = new Rectangle(rect.X + Dpi.Px(12), rect.Y + Dpi.Px(12), Dpi.Px(40), Dpi.Px(40));
             using (GraphicsPath tilePath = Theme.CreateRoundedRectangle(tile, 10))
             using (LinearGradientBrush tileFill = new LinearGradientBrush(tile, Color.FromArgb(52, 38, 78), Theme.BgSurface, 35f))
             using (Pen icon = new Pen(Theme.BrandPurpleLight, 1.5f))
@@ -33,19 +33,19 @@ namespace MediaDownloader
                 bool audio = item.Mode == DownloadMode.BestAudioOnlyMp3 || item.Mode == DownloadMode.BestAudioOnlyM4a || item.Mode == DownloadMode.BestAudioOnlyFlac;
                 if (audio)
                 {
-                    g.DrawLine(icon, tile.X + 23, tile.Y + 12, tile.X + 23, tile.Y + 25);
-                    g.DrawLine(icon, tile.X + 23, tile.Y + 12, tile.X + 29, tile.Y + 14);
-                    g.DrawEllipse(icon, tile.X + 15, tile.Y + 22, 8, 5);
+                    g.DrawLine(icon, tile.X + Dpi.Px(23), tile.Y + Dpi.Px(12), tile.X + Dpi.Px(23), tile.Y + Dpi.Px(25));
+                    g.DrawLine(icon, tile.X + Dpi.Px(23), tile.Y + Dpi.Px(12), tile.X + Dpi.Px(29), tile.Y + Dpi.Px(14));
+                    g.DrawEllipse(icon, tile.X + Dpi.Px(15), tile.Y + Dpi.Px(22), Dpi.Px(8), Dpi.Px(5));
                 }
                 else
                 {
-                    g.DrawRectangle(icon, tile.X + 10, tile.Y + 14, 14, 12);
-                    g.DrawPolygon(icon, new Point[] { new Point(tile.X + 24, tile.Y + 17), new Point(tile.X + 30, tile.Y + 14), new Point(tile.X + 30, tile.Y + 26), new Point(tile.X + 24, tile.Y + 23) });
+                    g.DrawRectangle(icon, tile.X + Dpi.Px(10), tile.Y + Dpi.Px(14), Dpi.Px(14), Dpi.Px(12));
+                    g.DrawPolygon(icon, new Point[] { new Point(tile.X + Dpi.Px(24), tile.Y + Dpi.Px(17)), new Point(tile.X + Dpi.Px(30), tile.Y + Dpi.Px(14)), new Point(tile.X + Dpi.Px(30), tile.Y + Dpi.Px(26)), new Point(tile.X + Dpi.Px(24), tile.Y + Dpi.Px(23)) });
                 }
             }
 
-            int textX = tile.Right + 12;
-            int textWidth = Math.Max(1, rect.Right - textX - (completed ? 82 : 160));
+            int textX = tile.Right + Dpi.Px(12);
+            int textWidth = Math.Max(Dpi.Px(1), rect.Right - textX - (completed ? Dpi.Px(82) : Dpi.Px(160)));
             Color statusColor = Theme.AccentSuccess;
             if (item.Status == QueueItemStatus.Error || item.Status == QueueItemStatus.Cancelled) statusColor = Theme.AccentDanger;
             else if (item.Status == QueueItemStatus.Paused) statusColor = Theme.AccentWarning;
@@ -54,49 +54,49 @@ namespace MediaDownloader
             using (Font detail = new Font("Segoe UI", 8.5F))
             {
                 TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
-                TextRenderer.DrawText(g, item.Title, title, new Rectangle(textX, rect.Y + 10, textWidth, 23), Theme.TextPrimary, flags);
+                TextRenderer.DrawText(g, item.Title, title, new Rectangle(textX, rect.Y + Dpi.Px(10), textWidth, Dpi.Px(23)), Theme.TextPrimary, flags);
                 string subtitle = completed ? YtDlpCommandBuilder.GetTargetExtension(item.Mode).TrimStart('.').ToUpperInvariant() + "   ·   Completed" : item.BadgeLabel;
-                TextRenderer.DrawText(g, subtitle, detail, new Rectangle(textX, rect.Y + 32, textWidth, 20), Theme.TextSecondary, flags);
+                TextRenderer.DrawText(g, subtitle, detail, new Rectangle(textX, rect.Y + Dpi.Px(32), textWidth, Dpi.Px(20)), Theme.TextSecondary, flags);
                 if (completed)
                 {
                     DrawCompletedActions(g, rect);
                     return;
                 }
-                TextRenderer.DrawText(g, item.StatusText, detail, new Rectangle(rect.Right - 150, rect.Y + 12, 136, 20), statusColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+                TextRenderer.DrawText(g, item.StatusText, detail, new Rectangle(rect.Right - Dpi.Px(150), rect.Y + Dpi.Px(12), Dpi.Px(136), Dpi.Px(20)), statusColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
 
-                Rectangle track = new Rectangle(rect.X + 12, rect.Y + 63, rect.Width - 24, 4);
+                Rectangle track = new Rectangle(rect.X + Dpi.Px(12), rect.Y + Dpi.Px(63), rect.Width - Dpi.Px(24), Dpi.Px(4));
                 using (GraphicsPath path = Theme.CreateRoundedRectangle(track, 3))
                 using (SolidBrush brush = new SolidBrush(Theme.BorderSubtle)) g.FillPath(brush, path);
                 double percent = Math.Max(0, Math.Min(100, item.ProgressPercent));
                 int fillWidth = (int)(track.Width * percent / 100);
                 if (fillWidth > 0)
                 {
-                    Rectangle progress = new Rectangle(track.X, track.Y, fillWidth, 4);
+                    Rectangle progress = new Rectangle(track.X, track.Y, fillWidth, Dpi.Px(4));
                     using (GraphicsPath path = Theme.CreateRoundedRectangle(progress, 3))
                     using (SolidBrush brush = new SolidBrush(Theme.BrandPurple)) g.FillPath(brush, path);
                 }
                 string telemetry = string.Format("{0:0}%", percent);
                 if (item.Status == QueueItemStatus.Downloading) telemetry += "   ·   " + item.Speed + "   ·   " + item.Eta + " remaining";
-                TextRenderer.DrawText(g, telemetry, detail, new Rectangle(track.X, rect.Y + 78, Math.Max(1, track.Width - 110), 20), Theme.TextSecondary, flags);
+                TextRenderer.DrawText(g, telemetry, detail, new Rectangle(track.X, rect.Y + Dpi.Px(78), Math.Max(Dpi.Px(1), track.Width - Dpi.Px(110)), Dpi.Px(20)), Theme.TextSecondary, flags);
             }
 
             using (Pen icon = new Pen(Theme.TextSecondary, 1.5f))
             {
                 Rectangle folder = GetFolderButtonRect(rect);
-                g.DrawLines(icon, new Point[] { new Point(folder.X + 6, folder.Y + 10), new Point(folder.X + 6, folder.Y + 7), new Point(folder.X + 12, folder.Y + 7), new Point(folder.X + 15, folder.Y + 10), new Point(folder.X + 21, folder.Y + 10), new Point(folder.X + 19, folder.Y + 19), new Point(folder.X + 5, folder.Y + 19), new Point(folder.X + 6, folder.Y + 10), new Point(folder.X + 21, folder.Y + 10) });
+                g.DrawLines(icon, new Point[] { new Point(folder.X + Dpi.Px(6), folder.Y + Dpi.Px(10)), new Point(folder.X + Dpi.Px(6), folder.Y + Dpi.Px(7)), new Point(folder.X + Dpi.Px(12), folder.Y + Dpi.Px(7)), new Point(folder.X + Dpi.Px(15), folder.Y + Dpi.Px(10)), new Point(folder.X + Dpi.Px(21), folder.Y + Dpi.Px(10)), new Point(folder.X + Dpi.Px(19), folder.Y + Dpi.Px(19)), new Point(folder.X + Dpi.Px(5), folder.Y + Dpi.Px(19)), new Point(folder.X + Dpi.Px(6), folder.Y + Dpi.Px(10)), new Point(folder.X + Dpi.Px(21), folder.Y + Dpi.Px(10)) });
                 if (CanPauseOrResume(item.Status))
                 {
                     Rectangle pause = GetPauseResumeButtonRect(rect);
-                    g.DrawEllipse(icon, pause.X + 6, pause.Y + 6, 14, 14);
+                    g.DrawEllipse(icon, pause.X + Dpi.Px(6), pause.Y + Dpi.Px(6), Dpi.Px(14), Dpi.Px(14));
                     if (item.Status == QueueItemStatus.Paused)
-                        g.DrawPolygon(icon, new Point[] { new Point(pause.X + 11, pause.Y + 10), new Point(pause.X + 16, pause.Y + 13), new Point(pause.X + 11, pause.Y + 16) });
-                    else { g.DrawLine(icon, pause.X + 11, pause.Y + 10, pause.X + 11, pause.Y + 16); g.DrawLine(icon, pause.X + 15, pause.Y + 10, pause.X + 15, pause.Y + 16); }
+                        g.DrawPolygon(icon, new Point[] { new Point(pause.X + Dpi.Px(11), pause.Y + Dpi.Px(10)), new Point(pause.X + Dpi.Px(16), pause.Y + Dpi.Px(13)), new Point(pause.X + Dpi.Px(11), pause.Y + Dpi.Px(16)) });
+                    else { g.DrawLine(icon, pause.X + Dpi.Px(11), pause.Y + Dpi.Px(10), pause.X + Dpi.Px(11), pause.Y + Dpi.Px(16)); g.DrawLine(icon, pause.X + Dpi.Px(15), pause.Y + Dpi.Px(10), pause.X + Dpi.Px(15), pause.Y + Dpi.Px(16)); }
                 }
                 if (CanCancelStatus(item.Status))
                 {
                     Rectangle cancel = GetActionButtonRect(rect);
-                    g.DrawLine(icon, cancel.X + 9, cancel.Y + 9, cancel.X + 17, cancel.Y + 17);
-                    g.DrawLine(icon, cancel.X + 17, cancel.Y + 9, cancel.X + 9, cancel.Y + 17);
+                    g.DrawLine(icon, cancel.X + Dpi.Px(9), cancel.Y + Dpi.Px(9), cancel.X + Dpi.Px(17), cancel.Y + Dpi.Px(17));
+                    g.DrawLine(icon, cancel.X + Dpi.Px(17), cancel.Y + Dpi.Px(9), cancel.X + Dpi.Px(9), cancel.Y + Dpi.Px(17));
                 }
             }
         }
@@ -104,14 +104,14 @@ namespace MediaDownloader
         private void DrawCompletedActions(Graphics g, Rectangle rect)
         {
             int cy = rect.Y + rect.Height / 2;
-            int checkX = rect.Right - 57;
+            int checkX = rect.Right - Dpi.Px(57);
             using (Pen check = new Pen(Theme.AccentSuccess, 1.5f))
             using (Pen icon = new Pen(Theme.TextSecondary, 1.3f))
             {
-                g.DrawEllipse(check, checkX - 6, cy - 6, 12, 12);
-                g.DrawLines(check, new Point[] { new Point(checkX - 3, cy), new Point(checkX - 1, cy + 2), new Point(checkX + 3, cy - 3) });
+                g.DrawEllipse(check, checkX - Dpi.Px(6), cy - Dpi.Px(6), Dpi.Px(12), Dpi.Px(12));
+                g.DrawLines(check, new Point[] { new Point(checkX - Dpi.Px(3), cy), new Point(checkX - Dpi.Px(1), cy + Dpi.Px(2)), new Point(checkX + Dpi.Px(3), cy - Dpi.Px(3)) });
                 Rectangle folder = GetFolderButtonRect(rect);
-                g.DrawLines(icon, new Point[] { new Point(folder.X + 6, cy + 5), new Point(folder.X + 6, cy - 4), new Point(folder.X + 12, cy - 4), new Point(folder.X + 15, cy - 1), new Point(folder.X + 21, cy - 1), new Point(folder.X + 19, cy + 5), new Point(folder.X + 6, cy + 5) });
+                g.DrawLines(icon, new Point[] { new Point(folder.X + Dpi.Px(6), cy + Dpi.Px(5)), new Point(folder.X + Dpi.Px(6), cy - Dpi.Px(4)), new Point(folder.X + Dpi.Px(12), cy - Dpi.Px(4)), new Point(folder.X + Dpi.Px(15), cy - Dpi.Px(1)), new Point(folder.X + Dpi.Px(21), cy - Dpi.Px(1)), new Point(folder.X + Dpi.Px(19), cy + Dpi.Px(5)), new Point(folder.X + Dpi.Px(6), cy + Dpi.Px(5)) });
             }
         }
     }

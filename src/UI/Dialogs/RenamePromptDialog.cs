@@ -17,8 +17,8 @@ namespace MediaDownloader
         public RenamePromptDialog(string existingFileName, string suggestedNewBaseName, string extension)
         {
             Text = "Stash";
-            AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(690, 354);
+            AutoScaleMode = AutoScaleMode.None;
+            ClientSize = new Size(Dpi.Px(690), Dpi.Px(354));
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
@@ -26,7 +26,7 @@ namespace MediaDownloader
             BackColor = Theme.BgTopBar;
             ForeColor = Theme.TextPrimary;
             Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
-            Padding = new Padding(18);
+            Padding = new Padding(Dpi.Px(18));
 
             try
             {
@@ -48,7 +48,7 @@ namespace MediaDownloader
             Label lblTitle = new Label
             {
                 Text = "File already exists",
-                Location = new Point(72, 22),
+                Location = new Point(Dpi.Px(72), Dpi.Px(22)),
                 AutoSize = true,
                 Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary
@@ -57,8 +57,8 @@ namespace MediaDownloader
             Label lblExisting = new Label
             {
                 Text = existingFileName,
-                Location = new Point(12, 37),
-                Size = new Size(626, 22),
+                Location = new Point(Dpi.Px(12), Dpi.Px(37)),
+                Size = new Size(Dpi.Px(626), Dpi.Px(22)),
                 AutoEllipsis = true,
                 Font = new Font("Segoe UI", 9F),
                 ForeColor = Theme.TextPrimary,
@@ -69,7 +69,7 @@ namespace MediaDownloader
             Label lblPrompt = new Label
             {
                 Text = "Save as",
-                Location = new Point(20, 168),
+                Location = new Point(Dpi.Px(20), Dpi.Px(168)),
                 AutoSize = true,
                 ForeColor = Theme.TextPrimary,
                 Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold)
@@ -77,12 +77,12 @@ namespace MediaDownloader
 
             CardPanel pnlInput = new CardPanel
             {
-                Location = new Point(20, 194),
-                Size = new Size(650, 42),
-                Padding = new Padding(12, 11, 12, 8),
+                Location = new Point(Dpi.Px(20), Dpi.Px(194)),
+                Size = new Size(Dpi.Px(650), Dpi.Px(42)),
+                Padding = new Padding(Dpi.Px(12), Dpi.Px(11), Dpi.Px(12), Dpi.Px(8)),
                 CardFillColor = Theme.BgInput,
                 CardBorderColor = Theme.BorderFocus,
-                CornerRadius = 8
+                CornerRadius = Dpi.Px(8)
             };
 
             txtNewName = new TextBox
@@ -100,8 +100,8 @@ namespace MediaDownloader
             ModernButton btnCancel = new ModernButton
             {
                 Text = "Cancel",
-                Location = new Point(451, 301),
-                Size = new Size(70, 40),
+                Location = new Point(Dpi.Px(451), Dpi.Px(301)),
+                Size = new Size(Dpi.Px(70), Dpi.Px(40)),
                 BaseColor = Theme.BgSurface,
                 HoverColor = Theme.BgSurfaceHover,
                 BorderColor = Theme.BorderSubtle,
@@ -117,8 +117,8 @@ namespace MediaDownloader
             ModernButton btnSave = new ModernButton
             {
                 Text = "Save as New File",
-                Location = new Point(529, 301),
-                Size = new Size(141, 40),
+                Location = new Point(Dpi.Px(529), Dpi.Px(301)),
+                Size = new Size(Dpi.Px(141), Dpi.Px(40)),
                 BaseColor = Theme.BrandPurple,
                 HoverColor = Theme.BrandPurpleHover,
                 Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold)
@@ -136,18 +136,18 @@ namespace MediaDownloader
                 Close();
             };
 
-            Panel warning = new Panel { Location = new Point(20, 20), Size = new Size(40, 40) };
+            Panel warning = new Panel { Location = new Point(Dpi.Px(20), Dpi.Px(20)), Size = new Size(Dpi.Px(40), Dpi.Px(40)) };
             warning.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                using (var path = Theme.CreateRoundedRectangle(new Rectangle(0, 0, 39, 39), 11))
+                using (var path = Theme.CreateRoundedRectangle(new Rectangle(0, 0, Dpi.Px(39), Dpi.Px(39)), 11))
                 using (var fill = new SolidBrush(Color.FromArgb(62, 48, 27)))
                 using (var icon = new Pen(Theme.AccentWarning, 1.5f))
                 {
                     e.Graphics.FillPath(fill, path);
-                    e.Graphics.DrawLines(icon, new Point[] { new Point(14, 12), new Point(23, 12), new Point(27, 16), new Point(27, 28), new Point(14, 28), new Point(14, 12) });
-                    e.Graphics.DrawLine(icon, 20, 17, 20, 22);
-                    e.Graphics.DrawEllipse(icon, 19.5f, 25, 1, 1);
+                    e.Graphics.DrawLines(icon, new Point[] { new Point(Dpi.Px(14), Dpi.Px(12)), new Point(Dpi.Px(23), Dpi.Px(12)), new Point(Dpi.Px(27), Dpi.Px(16)), new Point(Dpi.Px(27), Dpi.Px(28)), new Point(Dpi.Px(14), Dpi.Px(28)), new Point(Dpi.Px(14), Dpi.Px(12)) });
+                    e.Graphics.DrawLine(icon, Dpi.Px(20), Dpi.Px(17), Dpi.Px(20), Dpi.Px(22));
+                    e.Graphics.DrawEllipse(icon, Dpi.Px(19.5f), Dpi.Px(25), Dpi.Px(1), Dpi.Px(1));
                 }
             };
             Controls.Add(warning);
@@ -155,17 +155,17 @@ namespace MediaDownloader
             Controls.Add(new Label
             {
                 Text = "A file with a similar name was found in your download folder.",
-                Location = new Point(72, 48), Size = new Size(590, 22),
+                Location = new Point(Dpi.Px(72), Dpi.Px(48)), Size = new Size(Dpi.Px(590), Dpi.Px(22)),
                 ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 9F)
             });
             CardPanel existing = new CardPanel
             {
-                Location = new Point(20, 82), Size = new Size(650, 70),
-                CardFillColor = Theme.BgSurface, CardBorderColor = Color.Empty, CornerRadius = 12
+                Location = new Point(Dpi.Px(20), Dpi.Px(82)), Size = new Size(Dpi.Px(650), Dpi.Px(70)),
+                CardFillColor = Theme.BgSurface, CardBorderColor = Color.Empty, CornerRadius = Dpi.Px(12)
             };
             existing.Controls.Add(new Label
             {
-                Text = "EXISTING FILE", Location = new Point(12, 12), Size = new Size(620, 18),
+                Text = "EXISTING FILE", Location = new Point(Dpi.Px(12), Dpi.Px(12)), Size = new Size(Dpi.Px(620), Dpi.Px(18)),
                 Font = new Font("Segoe UI", 8F), ForeColor = Theme.TextSecondary, BackColor = Theme.BgSurface
             });
             existing.Controls.Add(lblExisting);
@@ -173,10 +173,10 @@ namespace MediaDownloader
             Controls.Add(new Label
             {
                 Text = "The " + extension + " extension will be added automatically.",
-                Location = new Point(20, 242), Size = new Size(650, 22),
+                Location = new Point(Dpi.Px(20), Dpi.Px(242)), Size = new Size(Dpi.Px(650), Dpi.Px(22)),
                 ForeColor = Theme.TextMuted, Font = new Font("Segoe UI", 8.5F)
             });
-            Controls.Add(new Panel { Location = new Point(20, 278), Size = new Size(650, 1), BackColor = Theme.BorderSubtle });
+            Controls.Add(new Panel { Location = new Point(Dpi.Px(20), Dpi.Px(278)), Size = new Size(Dpi.Px(650), Dpi.Px(1)), BackColor = Theme.BorderSubtle });
             Controls.Add(lblPrompt);
             Controls.Add(pnlInput);
             Controls.Add(btnCancel);

@@ -28,7 +28,7 @@ namespace MediaDownloader
 
         public CompactToggleSwitch()
         {
-            Size = new Size(38, 20);
+            Size = new Size(Dpi.Px(38), Dpi.Px(20));
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
@@ -67,7 +67,7 @@ namespace MediaDownloader
                 g.FillRectangle(clear, ClientRectangle);
             }
 
-            Rectangle pillRect = new Rectangle(0, 0, Width - 1, Height - 1);
+            Rectangle pillRect = new Rectangle(0, 0, Width - Dpi.Px(1), Height - Dpi.Px(1));
             Color trackColor = isChecked
                 ? (isHovered ? Theme.BrandPurpleHover : Theme.BrandPurple)
                 : (isHovered ? Color.FromArgb(68, 72, 84) : Color.FromArgb(52, 56, 66));

@@ -25,7 +25,7 @@ namespace MediaDownloader
             BaseColor = Theme.BgSurface;
             HoverColor = Theme.BgSurfaceHover;
             BorderColor = Color.Empty;
-            CornerRadius = 6;
+            CornerRadius = Dpi.Px(6);
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
@@ -71,7 +71,7 @@ namespace MediaDownloader
                 g.FillRectangle(clearBrush, ClientRectangle);
             }
 
-            Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            Rectangle rect = new Rectangle(0, 0, Width - Dpi.Px(1), Height - Dpi.Px(1));
             Color fill = !Enabled
                 ? Color.FromArgb(30, 34, 45)
                 : (isPressed ? ControlPaint.Dark(BaseColor, 0.05f) : (isHovered ? HoverColor : BaseColor));

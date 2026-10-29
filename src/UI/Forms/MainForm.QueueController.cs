@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -25,7 +25,7 @@ namespace MediaDownloader
                 lblToolsStatus.Text = "● Engine Ready";
                 lblToolsStatus.ForeColor = Theme.AccentSuccess;
                 btnInstallTools.Text = "Update Engine";
-                btnInstallTools.Size = new Size(108, 27);
+                btnInstallTools.Size = new Size(Dpi.Px(108), Dpi.Px(27));
                 btnInstallTools.BaseColor = Theme.BgTopBar;
                 btnInstallTools.HoverColor = Theme.BgSurfaceHover;
                 btnInstallTools.BorderColor = Color.Empty;
@@ -39,7 +39,7 @@ namespace MediaDownloader
                 lblToolsStatus.Text = "● Missing: " + string.Join(" & ", missing);
                 lblToolsStatus.ForeColor = Theme.AccentWarning;
                 btnInstallTools.Text = "Install yt-dlp + FFmpeg";
-                btnInstallTools.Size = new Size(165, 27);
+                btnInstallTools.Size = new Size(Dpi.Px(165), Dpi.Px(27));
                 btnInstallTools.BaseColor = Theme.BrandPurple;
                 btnInstallTools.HoverColor = Theme.BrandPurpleHover;
                 btnInstallTools.BorderColor = Color.Empty;
