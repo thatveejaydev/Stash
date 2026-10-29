@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.RegularExpressions;
 
@@ -43,6 +43,11 @@ namespace MediaDownloader
 
         public static void ParseLine(DownloadQueueItem item, string line, Action onUiChanged, Action<string> onLogLine)
         {
+            if (line.StartsWith("STASH_FINAL:", StringComparison.Ordinal))
+            {
+                item.OutputFilePath = line.Substring("STASH_FINAL:".Length).Trim();
+                return;
+            }
             Match destMatch = DestinationRegex.Match(line);
             if (destMatch.Success)
             {

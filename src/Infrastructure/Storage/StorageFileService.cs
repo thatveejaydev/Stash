@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -108,85 +108,35 @@ namespace MediaDownloader
 
         public static async Task<int> CleanupPartialFilesForItemAsync(DownloadQueueItem item)
         {
-            if (item == null || string.IsNullOrEmpty(item.OutputFolder) || !Directory.Exists(item.OutputFolder))
-                return 0;
-
-            List<string> basePrefixes = new List<string>();
-            if (!string.IsNullOrEmpty(item.CustomBaseFileName))
-            {
-                basePrefixes.Add(item.CustomBaseFileName);
-            }
-            if (!string.IsNullOrEmpty(item.Title) && item.Title != item.Url)
-            {
-                string sanitized = SanitizeFileName(item.Title);
-                if (!string.IsNullOrEmpty(sanitized) && !basePrefixes.Contains(sanitized))
-                {
-                    basePrefixes.Add(sanitized);
-                }
-            }
-            lock (item.TrackedFilePaths)
-            {
-                foreach (string tracked in item.TrackedFilePaths)
-                {
-                    string fileName = Path.GetFileName(tracked);
-                    if (!string.IsNullOrEmpty(fileName))
-                    {
-                        basePrefixes.Add(fileName);
-                        string noExt = Path.GetFileNameWithoutExtension(fileName);
-                        if (!string.IsNullOrEmpty(noExt)) basePrefixes.Add(noExt);
-                    }
-                }
-            }
-
-            int deletedCount = 0;
-
-            // Retry a few times to allow killed yt-dlp/ffmpeg child processes to release OS file handles
+            if (item == null) return 0;
+            string folder = Path.GetFullPath(item.TemporaryFolder);
+            string parent = Path.GetFullPath(item.OutputFolder).TrimEnd(Path.DirectorySeparatorChar);
+            if (!string.Equals(Path.GetDirectoryName(folder), parent, StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFileName(folder).StartsWith(".stash-temp-", StringComparison.Ordinal))
+                throw new InvalidOperationException("Invalid temporary folder.");
+            int deleted = 0;
             for (int attempt = 0; attempt < 4; attempt++)
             {
                 await Task.Delay(150);
                 try
                 {
-                    string[] allFiles = Directory.GetFiles(item.OutputFolder);
-                    foreach (string fullPath in allFiles)
+                    if (!Directory.Exists(folder)) break;
+                    // Never follow junctions or recursively delete unknown subdirectories.
+                    if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) break;
+                    foreach (string file in Directory.GetFiles(folder))
                     {
-                        string fileName = Path.GetFileName(fullPath);
-                        if (string.IsNullOrEmpty(fileName)) continue;
-
-                        bool isTempOrFragment =
-                            fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase) ||
-                            fileName.EndsWith(".ytdl", StringComparison.OrdinalIgnoreCase) ||
-                            fileName.EndsWith(".temp", StringComparison.OrdinalIgnoreCase) ||
-                            fileName.IndexOf(".part-Frag", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            Regex.IsMatch(fileName, @"\.f[0-9]+\.[a-zA-Z0-9]+(\.part.*)?$", RegexOptions.IgnoreCase);
-
-                        if (!isTempOrFragment) continue;
-
-                        bool matchesItem = false;
-                        foreach (string prefix in basePrefixes)
-                        {
-                            if (!string.IsNullOrEmpty(prefix) &&
-                                fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                            {
-                                matchesItem = true;
-                                break;
-                            }
-                        }
-
-                        if (matchesItem)
-                        {
-                            try
-                            {
-                                File.Delete(fullPath);
-                                deletedCount++;
-                            }
-                            catch { }
-                        }
+                        if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) continue;
+                        try { File.Delete(file); deleted++; }
+                        catch (IOException) { }
+                        catch (UnauthorizedAccessException) { }
                     }
+                    Directory.Delete(folder, false);
+                    break;
                 }
-                catch { }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
-
-            return deletedCount;
+            return deleted;
         }
     }
 }

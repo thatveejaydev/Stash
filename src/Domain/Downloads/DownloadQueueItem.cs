@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -17,6 +17,7 @@ namespace MediaDownloader
         public int ConcurrentFragments { get; set; }
         public string BadgeLabel { get; set; }
         public string OutputFolder { get; set; }
+        public string TemporaryFolder { get; private set; }
         public string CustomBaseFileName { get; set; }
         public QueueItemStatus Status { get; set; }
         public string StatusText { get; set; }
@@ -50,6 +51,7 @@ namespace MediaDownloader
             ConcurrentFragments = Math.Max(1, Math.Min(16, concurrentFragments));
             BadgeLabel = badgeLabel;
             OutputFolder = outputFolder;
+            TemporaryFolder = System.IO.Path.Combine(System.IO.Path.GetFullPath(outputFolder), ".stash-temp-" + Guid.NewGuid().ToString("N"));
             CustomBaseFileName = null;
             Status = QueueItemStatus.Queued;
             StatusText = "Queued";

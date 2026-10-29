@@ -16,8 +16,8 @@ namespace MediaDownloader
         public static readonly Color BorderFocus = Color.FromArgb(139, 92, 246);
 
         public static readonly Color TextPrimary = Color.FromArgb(244, 245, 248);
-        public static readonly Color TextSecondary = Color.FromArgb(158, 165, 180);
-        public static readonly Color TextMuted = Color.FromArgb(110, 117, 132);
+        public static readonly Color TextSecondary = Color.FromArgb(185, 191, 204);
+        public static readonly Color TextMuted = Color.FromArgb(150, 158, 174);
 
         // Vibrant Purple Brand Colors
         public static readonly Color BrandPurple = Color.FromArgb(124, 58, 237);

@@ -14,7 +14,7 @@ namespace MediaDownloader
 
         public PasteLinkHeroButton()
         {
-            Size = new Size(154, 40);
+            Size = new Size(112, 40);
             Cursor = Cursors.Hand;
             Font = new Font("Segoe UI Semibold", 10.2F, FontStyle.Bold);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -70,13 +70,9 @@ namespace MediaDownloader
                 g.FillPath(b, path);
             }
 
-            int iconCenterX = 33;
-            int iconCenterY = Height / 2;
-            DrawClipboardPasteIcon(g, new Point(iconCenterX, iconCenterY), Color.White, fill);
-
-            Rectangle textRect = new Rectangle(48, 0, Width - 54, Height);
+            Rectangle textRect = new Rectangle(0, 0, Width, Height);
             TextRenderer.DrawText(g, "Paste Link", Font, textRect, Color.White,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
 
         private void DrawClipboardPasteIcon(Graphics g, Point center, Color fg, Color bg)

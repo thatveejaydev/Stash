@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 
@@ -69,12 +69,7 @@ namespace MediaDownloader
                 formatPart += " • TAGS";
             }
 
-            if (concurrentFragments > 1)
-            {
-                formatPart += " • " + concurrentFragments + "X";
-            }
-
-            return formatPart;
+            return formatPart.Replace(" • ", "   ·   ");
         }
 
         public static string BuildArguments(DownloadQueueItem item, string ffmpegPath)
@@ -84,10 +79,11 @@ namespace MediaDownloader
                 : null;
 
             string outputTemplate = !string.IsNullOrEmpty(safeCustomName)
-                ? Path.Combine(item.OutputFolder, safeCustomName.Replace("%", "%%") + ".%(ext)s")
-                : Path.Combine(item.OutputFolder, "%(title).100B.%(ext)s");
+                ? safeCustomName.Replace("%", "%%") + ".%(ext)s"
+                : "%(title).100B.%(ext)s";
 
             StringBuilder args = new StringBuilder();
+            args.AppendFormat("--paths \"home:{0}\" --paths \"temp:{1}\" --print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ", Path.GetFullPath(item.OutputFolder), item.TemporaryFolder);
             args.Append("--newline --no-colors --progress --no-playlist --continue --windows-filenames --trim-filenames 120 ");
 
             // Multi-Connection Turbo Downloading: concurrent DASH/HLS fragments + chunked HTTP Range requests to bypass single-stream server throttling

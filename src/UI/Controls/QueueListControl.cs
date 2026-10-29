@@ -8,14 +8,14 @@ using System.Windows.Forms;
 namespace MediaDownloader
 {
     // Virtual Smooth Queue Canvas for modern card-like rows
-    public class QueueListControl : Control
+    public partial class QueueListControl : Control
     {
         private readonly List<DownloadQueueItem> items = new List<DownloadQueueItem>();
         public DownloadQueueItem SelectedItem { get; private set; }
         private DownloadQueueItem hoveredItem = null;
-        private VScrollBar scrollBar;
-        private const int RowHeight = 64;
-        private const int RowGap = 6;
+        private DarkScrollBar scrollBar;
+        private const int RowHeight = 112;
+        private const int RowGap = 10;
 
         public event EventHandler SelectionChanged;
         public event Action<DownloadQueueItem> PauseResumeRequested;
@@ -27,7 +27,7 @@ namespace MediaDownloader
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
             BackColor = Theme.BgWindow;
 
-            scrollBar = new VScrollBar
+            scrollBar = new DarkScrollBar
             {
                 Dock = DockStyle.Right,
                 Visible = false,
@@ -66,7 +66,8 @@ namespace MediaDownloader
 
         private void UpdateScrollBar()
         {
-            int totalHeight = items.Count * (RowHeight + RowGap) + 8;
+            int totalHeight = 8;
+            foreach (DownloadQueueItem item in items) totalHeight += GetRowHeight(item) + RowGap;
             if (totalHeight > ClientSize.Height && ClientSize.Height > 0)
             {
                 scrollBar.Maximum = totalHeight;
@@ -140,15 +141,16 @@ namespace MediaDownloader
                 }
 
                 Rectangle actionRect = GetActionButtonRect(rowRect);
+                if (GetFolderButtonRect(rowRect).Contains(e.Location))
+                {
+                    if (OpenFileFolderRequested != null) OpenFileFolderRequested(hit);
+                    return;
+                }
                 if (actionRect.Contains(e.Location))
                 {
                     if (CanCancelStatus(hit.Status))
                     {
                         if (CancelRequested != null) CancelRequested(hit);
-                    }
-                    else if (hit.Status == QueueItemStatus.Completed)
-                    {
-                        if (OpenFileFolderRequested != null) OpenFileFolderRequested(hit);
                     }
                 }
                 Invalidate();
@@ -179,6 +181,11 @@ namespace MediaDownloader
             return HitTestItemDetailed(pt, out idx, out r);
         }
 
+        private int GetRowHeight(DownloadQueueItem item)
+        {
+            return item.Status == QueueItemStatus.Completed ? 64 : RowHeight;
+        }
+
         private DownloadQueueItem HitTestItemDetailed(Point pt, out int hitIndex, out Rectangle hitRect)
         {
             hitIndex = -1;
@@ -189,7 +196,8 @@ namespace MediaDownloader
 
             for (int i = 0; i < items.Count; i++)
             {
-                Rectangle r = new Rectangle(2, yOffset + i * (RowHeight + RowGap), width, RowHeight);
+                Rectangle r = new Rectangle(2, yOffset, width, GetRowHeight(items[i]));
+                yOffset += r.Height + RowGap;
                 if (r.Contains(pt))
                 {
                     hitIndex = i;
@@ -202,16 +210,17 @@ namespace MediaDownloader
 
         private Rectangle GetPauseResumeButtonRect(Rectangle rowRect)
         {
-            return new Rectangle(rowRect.Right - 70, rowRect.Y + (rowRect.Height - 26) / 2, 26, 26);
+            return new Rectangle(rowRect.Right - 102, rowRect.Bottom - 38, 26, 26);
         }
 
         private Rectangle GetActionButtonRect(Rectangle rowRect)
         {
-            return new Rectangle(rowRect.Right - 38, rowRect.Y + (rowRect.Height - 26) / 2, 26, 26);
+            return new Rectangle(rowRect.Right - 38, rowRect.Height == 64 ? rowRect.Y + 19 : rowRect.Bottom - 38, 26, 26);
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
+            UpdateScrollBar();
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
@@ -233,7 +242,8 @@ namespace MediaDownloader
 
             for (int i = 0; i < items.Count; i++)
             {
-                Rectangle rowRect = new Rectangle(2, yOffset + i * (RowHeight + RowGap), width, RowHeight);
+                Rectangle rowRect = new Rectangle(2, yOffset, width, GetRowHeight(items[i]));
+                yOffset += rowRect.Height + RowGap;
                 if (rowRect.Bottom < 0 || rowRect.Top > ClientSize.Height) continue;
                 DrawQueueCard(g, items[i], rowRect);
             }
@@ -257,7 +267,7 @@ namespace MediaDownloader
             }
         }
 
-        private void DrawQueueCard(Graphics g, DownloadQueueItem item, Rectangle rect)
+        private void DrawLegacyQueueCard(Graphics g, DownloadQueueItem item, Rectangle rect)
         {
             bool isSelected = (item == SelectedItem);
             bool isHovered = (item == hoveredItem);

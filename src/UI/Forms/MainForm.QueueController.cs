@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -26,9 +26,9 @@ namespace MediaDownloader
                 lblToolsStatus.ForeColor = Theme.AccentSuccess;
                 btnInstallTools.Text = "Update Engine";
                 btnInstallTools.Size = new Size(108, 27);
-                btnInstallTools.BaseColor = Theme.BgSurface;
+                btnInstallTools.BaseColor = Theme.BgTopBar;
                 btnInstallTools.HoverColor = Theme.BgSurfaceHover;
-                btnInstallTools.BorderColor = Theme.BorderSubtle;
+                btnInstallTools.BorderColor = Color.Empty;
                 btnInstallTools.ForeColor = Theme.TextSecondary;
             }
             else
@@ -160,7 +160,15 @@ namespace MediaDownloader
             }
 
             string rawInput = Clipboard.GetText().Trim();
-            if (string.IsNullOrEmpty(rawInput)) return;
+            if (!DownloadUrlValidator.IsValid(rawInput))
+            {
+                MessageBox.Show(
+                    "Please copy a valid video or audio link starting with http:// or https://, then try again. Copy only one link at a time.",
+                    "Invalid Link",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
 
             if (!File.Exists(ytDlpPath) || !File.Exists(ffmpegPath))
             {
@@ -233,6 +241,7 @@ namespace MediaDownloader
             int total = queue.Count;
             int running = queue.FindAll(x => x.Status == QueueItemStatus.Downloading || x.Status == QueueItemStatus.Merging || x.Status == QueueItemStatus.FetchingInfo).Count;
             int done = queue.FindAll(x => x.Status == QueueItemStatus.Completed).Count;
+            lblActiveDownloads.Text = string.Format("·  {0} active download{1}", running, running == 1 ? "" : "s");
 
             if (running > 0)
                 lblQueueStats.Text = string.Format("QUEUE  •  {0} ACTIVE  •  {1} OF {2} COMPLETED", running, done, total);
@@ -325,6 +334,7 @@ namespace MediaDownloader
                 item.StatusText = item.ProgressPercent > 0 ? "Resuming..." : "Starting...";
                 RefreshQueueUi();
 
+                Directory.CreateDirectory(item.TemporaryFolder);
                 string arguments = YtDlpCommandBuilder.BuildArguments(item, ffmpegPath);
                 AppendLog(string.Format("[{0}] yt-dlp {1}", item.Id, arguments));
 
@@ -385,6 +395,7 @@ namespace MediaDownloader
                     }
                     else if (proc.ExitCode == 0)
                     {
+                        await StorageFileService.CleanupPartialFilesForItemAsync(item);
                         item.ProgressPercent = 100.0;
                         item.Speed = "—";
                         item.Eta = "00:00";

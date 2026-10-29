@@ -30,6 +30,7 @@ namespace MediaDownloader
         private ModernButton btnToggleLog;
         private Label lblToolsStatus;
         private Label lblQueueStats;
+        private Label lblActiveDownloads;
         private QueueListControl queueListView;
         private RichTextBox txtLog;
         private Panel pnlBottomLog;
@@ -177,10 +178,7 @@ namespace MediaDownloader
 
         private string GetOptionsSummaryLabel()
         {
-            return string.Format("{0} • {1} • {2}x",
-                GetEmbedShortDisplayName(),
-                settings.ParallelCount,
-                settings.ConcurrentFragments);
+            return "Options";
         }
 
         private void InitializeUi()
@@ -221,15 +219,21 @@ namespace MediaDownloader
             FlowLayoutPanel flowTop = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                WrapContents = false,
+                WrapContents = true,
                 AutoSize = false,
                 BackColor = Theme.BgTopBar
+            };
+            flowTop.Layout += (s, e) =>
+            {
+                int desiredHeight = flowTop.GetPreferredSize(new Size(flowTop.ClientSize.Width, 0)).Height
+                    + pnlTopBar.Padding.Vertical;
+                if (pnlTopBar.Height != desiredHeight) pnlTopBar.Height = desiredHeight;
             };
 
             // Purple "[Paste Link]" Hero Button
             btnPasteHero = new PasteLinkHeroButton
             {
-                Margin = new Padding(0, 0, 16, 0)
+                Margin = new Padding(0, 0, 6, 0)
             };
             appToolTip.SetToolTip(btnPasteHero, "Paste link from clipboard & download immediately (Ctrl+V)");
             btnPasteHero.Click += (s, e) => PasteFromClipboardAndDownload();
@@ -245,31 +249,35 @@ namespace MediaDownloader
             // "Download  Video ⌄"
             selDownloadFormat = new InlineFlowSelector("Download", FormatShortNames[settings.FormatIndex])
             {
-                Margin = new Padding(0, 2, 12, 0)
+                Margin = new Padding(0, 0, 8, 0)
             };
             selDownloadFormat.Clicked += (s, e) => ShowFormatPopup();
 
             // "Quality  Best ⌄"
             selQuality = new InlineFlowSelector("Quality", QualityShortNames[settings.QualityIndex])
             {
-                Margin = new Padding(0, 2, 12, 0)
+                Margin = new Padding(0, 0, 8, 0)
             };
             selQuality.Clicked += (s, e) => ShowQualityPopup();
 
             // "Save to  Downloads ⌄"
             selSaveTo = new InlineFlowSelector("Save to", GetFolderShortDisplayName(settings.CurrentOutputFolder))
             {
-                Margin = new Padding(0, 2, 12, 0)
+                Margin = new Padding(0, 0, 8, 0)
             };
             appToolTip.SetToolTip(selSaveTo, settings.CurrentOutputFolder);
             selSaveTo.Clicked += (s, e) => ShowSaveToHistoryPopup();
 
             // Combined Nested Dropdown for "Embed", "Parallel", and "Turbo"
-            selOptions = new InlineFlowSelector("Options", GetOptionsSummaryLabel())
+            selOptions = new InlineFlowSelector("", GetOptionsSummaryLabel())
             {
-                Margin = new Padding(0, 2, 0, 0)
+                Margin = new Padding(0),
+                IconOnly = true,
+                Dock = DockStyle.Right,
+                AccessibleName = "Download options",
+                AccessibleRole = AccessibleRole.PushButton
             };
-            appToolTip.SetToolTip(selOptions, "Configure Embed Tags, Parallel Downloads, and Multi-Connection Turbo");
+            appToolTip.SetToolTip(selOptions, "Download options");
             selOptions.Clicked += (s, e) => ShowOptionsNestedPopup();
 
             toggleSmartMode.CheckedChanged += (s, e) =>
@@ -284,28 +292,24 @@ namespace MediaDownloader
             UpdateQualitySelectorEnabledState();
 
             flowTop.Controls.Add(btnPasteHero);
-            flowTop.Controls.Add(toggleSmartMode);
             flowTop.Controls.Add(selDownloadFormat);
             flowTop.Controls.Add(selQuality);
             flowTop.Controls.Add(selSaveTo);
-            flowTop.Controls.Add(selOptions);
 
             pnlTopBar.Controls.Add(flowTop);
+            pnlTopBar.Controls.Add(selOptions);
 
             // 2. Secondary Sub-Toolbar (Queue Stats + Engine Status + Action Buttons)
             TableLayoutPanel pnlQueueBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
                 Height = 44,
-                ColumnCount = 6,
+                ColumnCount = 3,
                 RowCount = 1,
                 Padding = new Padding(18, 8, 18, 4),
                 BackColor = Theme.BgWindow
             };
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -371,7 +375,7 @@ namespace MediaDownloader
 
             btnToggleLog = new ModernButton
             {
-                Text = "Hide Console",
+                Text = "Console",
                 Size = new Size(98, 27),
                 Margin = new Padding(0),
                 BaseColor = Theme.BgSurface,
@@ -384,21 +388,46 @@ namespace MediaDownloader
             btnToggleLog.Click += (s, e) =>
             {
                 pnlBottomLog.Visible = !pnlBottomLog.Visible;
-                btnToggleLog.Text = pnlBottomLog.Visible ? "Hide Console" : "Show Console";
+                btnToggleLog.Text = pnlBottomLog.Visible ? "Hide Console" : "Console";
             };
 
             pnlQueueBar.Controls.Add(lblQueueStats, 0, 0);
-            pnlQueueBar.Controls.Add(lblToolsStatus, 1, 0);
-            pnlQueueBar.Controls.Add(btnInstallTools, 2, 0);
-            pnlQueueBar.Controls.Add(btnCancelSelected, 3, 0);
-            pnlQueueBar.Controls.Add(btnRemoveFinished, 4, 0);
-            pnlQueueBar.Controls.Add(btnToggleLog, 5, 0);
+            pnlQueueBar.Controls.Add(btnCancelSelected, 1, 0);
+            pnlQueueBar.Controls.Add(btnRemoveFinished, 2, 0);
+
+            TableLayoutPanel statusBar = new TableLayoutPanel
+            {
+                Dock = DockStyle.Bottom, Height = 38, ColumnCount = 5, RowCount = 1,
+                Padding = new Padding(20, 5, 18, 5), BackColor = Theme.BgTopBar
+            };
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            lblToolsStatus.Anchor = AnchorStyles.Left;
+            lblActiveDownloads = new Label
+            {
+                Text = "·  0 active downloads", AutoSize = true, Anchor = AnchorStyles.Left,
+                ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 8.5F),
+                Margin = new Padding(0)
+            };
+            btnInstallTools.Anchor = AnchorStyles.Right;
+            btnToggleLog.Anchor = AnchorStyles.Right;
+            btnInstallTools.BaseColor = Theme.BgTopBar;
+            btnToggleLog.BaseColor = Theme.BgTopBar;
+            btnToggleLog.BorderColor = Color.Empty;
+            statusBar.Controls.Add(lblToolsStatus, 0, 0);
+            statusBar.Controls.Add(lblActiveDownloads, 1, 0);
+            statusBar.Controls.Add(btnInstallTools, 3, 0);
+            statusBar.Controls.Add(btnToggleLog, 4, 0);
 
             // 3. Collapsible Bottom Console Log Card
             pnlBottomLog = new Panel
             {
                 Dock = DockStyle.Bottom,
                 Height = 125,
+                Visible = false,
                 Padding = new Padding(18, 6, 18, 14),
                 BackColor = Theme.BgWindow
             };
@@ -421,7 +450,7 @@ namespace MediaDownloader
                 BorderStyle = BorderStyle.None,
                 Font = new Font("Consolas", 8.8F)
             };
-            cardLog.Controls.Add(txtLog);
+            cardLog.Controls.Add(new DarkConsoleScrollHost(txtLog));
             pnlBottomLog.Controls.Add(cardLog);
 
             // 4. Center Custom Card Queue List
@@ -443,6 +472,7 @@ namespace MediaDownloader
 
             Controls.Add(pnlCenter);
             Controls.Add(pnlBottomLog);
+            Controls.Add(statusBar);
             Controls.Add(pnlQueueBar);
             Controls.Add(pnlTopBar);
         }
@@ -659,7 +689,7 @@ namespace MediaDownloader
             int leftWidth = 225;
             int leftHeight = 3 * 34 + 8; // 110
             int gap = 4;
-            int rightMaxWidth = 220;
+            int rightMaxWidth = 235;
             int totalWidth = leftWidth + gap + rightMaxWidth;
             int totalHeight = 34 + (6 * 46 + 8) + 8; // Enough height for 6 two-line rows in Parallel & 5 in Turbo
 
@@ -673,7 +703,7 @@ namespace MediaDownloader
             Panel pnlLeft = new Panel
             {
                 BackColor = Theme.BgSurface,
-                Location = new Point(0, 0),
+                Location = new Point(rightMaxWidth + gap, 0),
                 Width = leftWidth,
                 Height = leftHeight
             };
@@ -688,7 +718,7 @@ namespace MediaDownloader
             Panel pnlRightHost = new Panel
             {
                 BackColor = Theme.BgSurface,
-                Location = new Point(leftWidth + gap, 0),
+                Location = new Point(0, 0),
                 Width = rightMaxWidth,
                 Height = 76,
                 Visible = false
@@ -718,8 +748,8 @@ namespace MediaDownloader
                 Region reg = new Region(pnlLeft.Bounds);
                 if (pnlRightHost.Visible)
                 {
-                    // Include the 4px bridge gap between left menu and right submenu so the mouse never leaves the popup region while crossing over
-                    Rectangle bridge = new Rectangle(pnlLeft.Right, pnlRightHost.Top, gap, Math.Min(pnlLeft.Bottom, pnlRightHost.Bottom) - pnlRightHost.Top);
+                    // Bridge the gap so moving left into a submenu stays inside the popup.
+                    Rectangle bridge = new Rectangle(pnlRightHost.Right, pnlRightHost.Top, gap, Math.Min(pnlLeft.Bottom, pnlRightHost.Bottom) - pnlRightHost.Top);
                     if (bridge.Height > 0) reg.Union(bridge);
                     reg.Union(pnlRightHost.Bounds);
                 }
@@ -728,7 +758,7 @@ namespace MediaDownloader
 
             PopupMenuRow rowEmbed = new PopupMenuRow(
                 "Embed",
-                GetEmbedShortDisplayName() + "   ▸",
+                GetEmbedShortDisplayName() + "   ◂",
                 null,
                 false,
                 "")
@@ -739,7 +769,7 @@ namespace MediaDownloader
 
             PopupMenuRow rowParallel = new PopupMenuRow(
                 "Parallel",
-                settings.ParallelCount + (settings.ParallelCount == 1 ? " Download   ▸" : " Downloads   ▸"),
+                settings.ParallelCount + (settings.ParallelCount == 1 ? " Download   ◂" : " Downloads   ◂"),
                 null,
                 false,
                 "")
@@ -750,7 +780,7 @@ namespace MediaDownloader
 
             PopupMenuRow rowTurbo = new PopupMenuRow(
                 "Turbo",
-                settings.ConcurrentFragments + "x   ▸",
+                settings.ConcurrentFragments + "x   ◂",
                 null,
                 false,
                 "")
@@ -775,7 +805,7 @@ namespace MediaDownloader
 
                 pnlRightHost.SuspendLayout();
                 pnlRightHost.Controls.Clear();
-                pnlRightHost.Location = new Point(leftWidth + gap, alignY);
+                pnlRightHost.Location = new Point(pnlLeft.Left - gap - childPanel.Width, alignY);
                 pnlRightHost.Size = childPanel.Size;
                 childPanel.Location = Point.Empty;
                 pnlRightHost.Controls.Add(childPanel);
@@ -823,7 +853,7 @@ namespace MediaDownloader
 
             popup.Closed += (s, e) => selOptions.SetOpenState(false);
             selOptions.SetOpenState(true);
-            popup.Show(selOptions, new Point(0, selOptions.Height + 2));
+            popup.Show(selOptions, new Point(selOptions.Width - popup.Width, selOptions.Height + 2));
         }
 
         private Panel BuildEmbedSubmenuPanel(PopupMenuRow parentRow)
@@ -860,7 +890,7 @@ namespace MediaDownloader
                 rowMeta.IsSelected = settings.EmbedMetadata;
                 rowMeta.CheckGlyph = settings.EmbedMetadata ? "☑" : "☐";
                 rowMeta.Invalidate();
-                parentRow.RightBadgeText = GetEmbedShortDisplayName() + "   ▸";
+                parentRow.RightBadgeText = GetEmbedShortDisplayName() + "   ◂";
                 parentRow.Invalidate();
                 selOptions.SetValueLabel(GetOptionsSummaryLabel());
             };
@@ -882,7 +912,7 @@ namespace MediaDownloader
                 rowThumb.IsSelected = settings.EmbedThumbnail;
                 rowThumb.CheckGlyph = settings.EmbedThumbnail ? "☑" : "☐";
                 rowThumb.Invalidate();
-                parentRow.RightBadgeText = GetEmbedShortDisplayName() + "   ▸";
+                parentRow.RightBadgeText = GetEmbedShortDisplayName() + "   ◂";
                 parentRow.Invalidate();
                 selOptions.SetValueLabel(GetOptionsSummaryLabel());
             };
@@ -924,7 +954,7 @@ namespace MediaDownloader
                 {
                     settings.ParallelCount = count;
                     settings.Save();
-                    parentRow.RightBadgeText = count + (count == 1 ? " Download   ▸" : " Downloads   ▸");
+                    parentRow.RightBadgeText = count + (count == 1 ? " Download   ◂" : " Downloads   ◂");
                     parentRow.Invalidate();
                     selOptions.SetValueLabel(GetOptionsSummaryLabel());
                     ProcessQueue();
@@ -984,7 +1014,7 @@ namespace MediaDownloader
                 {
                     settings.ConcurrentFragments = fragCount;
                     settings.Save();
-                    parentRow.RightBadgeText = fragCount + "x   ▸";
+                    parentRow.RightBadgeText = fragCount + "x   ◂";
                     parentRow.Invalidate();
                     selOptions.SetValueLabel(GetOptionsSummaryLabel());
                     if (closeAll != null) closeAll();

@@ -11,6 +11,12 @@ namespace MediaDownloader
     {
         public string PrefixLabel { get; set; }
         public string ValueLabel { get; set; }
+        private bool iconOnly;
+        public bool IconOnly
+        {
+            get { return iconOnly; }
+            set { iconOnly = value; RecalculateWidth(); Invalidate(); }
+        }
         private bool isHovered = false;
         private bool isOpen = false;
 
@@ -20,7 +26,7 @@ namespace MediaDownloader
         {
             PrefixLabel = prefix;
             ValueLabel = initialValue;
-            Height = 36;
+            Height = 40;
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             RecalculateWidth();
@@ -41,12 +47,12 @@ namespace MediaDownloader
 
         public void RecalculateWidth()
         {
+            if (IconOnly) { Width = 40; return; }
             using (Font fPrefix = new Font("Segoe UI", 10F, FontStyle.Regular))
             using (Font fValue = new Font("Segoe UI Semibold", 10F, FontStyle.Bold))
             {
-                int w1 = string.IsNullOrEmpty(PrefixLabel) ? 0 : TextRenderer.MeasureText(PrefixLabel, fPrefix).Width;
-                int w2 = TextRenderer.MeasureText(ValueLabel, fValue).Width;
-                Width = w1 + w2 + 30;
+                string label = PrefixLabel == "Quality" && ValueLabel == "Best" ? "Best quality" : ValueLabel;
+                Width = TextRenderer.MeasureText(label, fValue).Width + 60;
             }
         }
 
@@ -95,23 +101,62 @@ namespace MediaDownloader
                 }
             }
 
+            // Only divide adjacent settings; the last dropdown has no trailing rule.
+            if (!string.IsNullOrEmpty(PrefixLabel))
+            {
+                using (Pen separator = new Pen(Theme.BorderSubtle))
+                    g.DrawLine(separator, Width - 1, 12, Width - 1, Height - 12);
+            }
+
             using (Font fPrefix = new Font("Segoe UI", 10F, FontStyle.Regular))
             using (Font fValue = new Font("Segoe UI Semibold", 10F, FontStyle.Bold))
             {
-                int x = 6;
-                if (!string.IsNullOrEmpty(PrefixLabel))
+                Color iconColor = Enabled ? Theme.TextSecondary : Theme.TextMuted;
+                using (Pen icon = new Pen(iconColor, 1.3f))
                 {
-                    Size sPref = TextRenderer.MeasureText(g, PrefixLabel, fPrefix, new Size(500, Height), TextFormatFlags.NoPadding);
-                    Rectangle rPref = new Rectangle(x, 0, sPref.Width, Height);
-                    TextRenderer.DrawText(g, PrefixLabel, fPrefix, rPref,
-                        Enabled ? Theme.TextSecondary : Theme.TextMuted,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                    x += sPref.Width + 6;
+                    int cy = Height / 2;
+                    GraphicsState iconState = g.Save();
+                    g.TranslateTransform(20, cy);
+                    g.ScaleTransform(0.8f, 0.8f);
+                    g.TranslateTransform(-20, -cy);
+                    if (PrefixLabel == "Download")
+                    {
+                        g.DrawRectangle(icon, 12, cy - 5, 11, 10);
+                        g.DrawLines(icon, new Point[] { new Point(23, cy - 2), new Point(28, cy - 5), new Point(28, cy + 5), new Point(23, cy + 2) });
+                    }
+                    else if (PrefixLabel == "Save to")
+                    {
+                        g.DrawLines(icon, new Point[] { new Point(12, cy + 5), new Point(12, cy - 5), new Point(18, cy - 5), new Point(21, cy - 2), new Point(27, cy - 2), new Point(27, cy + 5), new Point(12, cy + 5) });
+                    }
+                    else if (PrefixLabel == "Quality")
+                    {
+                        for (int i = 0; i < 3; i++)
+                        {
+                            int y = cy - 5 + i * 5;
+                            g.DrawLine(icon, 12, y, 27, y);
+                            g.DrawRectangle(icon, i == 1 ? 21 : 15, y - 2, 3, 4);
+                        }
+                    }
+                    else
+                    {
+                        PointF[] gear = new PointF[32];
+                        for (int i = 0; i < gear.Length; i++)
+                        {
+                            double angle = i * Math.PI * 2 / gear.Length;
+                            float radius = i % 4 == 0 || i % 4 == 3 ? 7.5f : 5.8f;
+                            gear[i] = new PointF(20 + radius * (float)Math.Cos(angle), cy + radius * (float)Math.Sin(angle));
+                        }
+                        g.DrawPolygon(icon, gear);
+                        g.DrawEllipse(icon, 17.5f, cy - 2.5f, 5, 5);
+                    }
+                    g.Restore(iconState);
                 }
-
-                Size sVal = TextRenderer.MeasureText(g, ValueLabel, fValue, new Size(500, Height), TextFormatFlags.NoPadding);
+                if (IconOnly) return;
+                int x = 35;
+                string label = PrefixLabel == "Quality" && ValueLabel == "Best" ? "Best quality" : ValueLabel;
+                Size sVal = TextRenderer.MeasureText(g, label, fValue, new Size(500, Height), TextFormatFlags.NoPadding);
                 Rectangle rVal = new Rectangle(x, 0, sVal.Width, Height);
-                TextRenderer.DrawText(g, ValueLabel, fValue, rVal,
+                TextRenderer.DrawText(g, label, fValue, rVal,
                     Enabled ? Theme.TextPrimary : Theme.TextMuted,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 x += sVal.Width + 11;
