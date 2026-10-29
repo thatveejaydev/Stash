@@ -22,7 +22,7 @@ if not exist "%~dp0bin" mkdir "%~dp0bin"
         /r:System.Core.dll ^
         /r:System.Drawing.dll ^
         /r:System.Windows.Forms.dll ^
-        "%~dp0src\Program.cs"
+        /recurse:"%~dp0src\*.cs"
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Compilation failed!
