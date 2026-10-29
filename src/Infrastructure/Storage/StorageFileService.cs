@@ -9,19 +9,45 @@ namespace MediaDownloader
 {
     public static class StorageFileService
     {
+        private const int MaxSafeBaseFileNameLength = 100;
+
         public static string SanitizeFileName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
             StringBuilder sb = new StringBuilder(name.Length);
             char[] invalid = Path.GetInvalidFileNameChars();
+            bool lastWasSpace = false;
+
             foreach (char c in name)
             {
+                if (c == '\uFFFD' || char.IsControl(c) || char.IsSurrogate(c))
+                {
+                    continue;
+                }
+
+                if (char.IsWhiteSpace(c))
+                {
+                    if (!lastWasSpace)
+                    {
+                        sb.Append(' ');
+                        lastWasSpace = true;
+                    }
+                    continue;
+                }
+
+                lastWasSpace = false;
                 if (Array.IndexOf(invalid, c) >= 0)
                     sb.Append('_');
                 else
                     sb.Append(c);
             }
-            return sb.ToString().Trim().TrimEnd('.');
+
+            string cleaned = sb.ToString().Trim().TrimEnd('.', ' ');
+            if (cleaned.Length > MaxSafeBaseFileNameLength)
+            {
+                cleaned = cleaned.Substring(0, MaxSafeBaseFileNameLength).Trim().TrimEnd('.', ' ', '_');
+            }
+            return cleaned;
         }
 
         public static string FindSimilarExistingFile(string folder, string cleanTitle, string videoId)

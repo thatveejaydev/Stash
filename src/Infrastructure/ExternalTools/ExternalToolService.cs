@@ -91,13 +91,16 @@ namespace MediaDownloader
                             string[] lines = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                             if (lines.Length >= 1)
                             {
-                                fetchedTitle = lines[0].Trim();
-                                item.Title = fetchedTitle;
-                                if (onTitleUpdated != null) onTitleUpdated();
+                                fetchedTitle = StorageFileService.SanitizeFileName(lines[0].Trim());
+                                if (!string.IsNullOrEmpty(fetchedTitle))
+                                {
+                                    item.Title = fetchedTitle;
+                                    if (onTitleUpdated != null) onTitleUpdated();
+                                }
                             }
                             if (lines.Length >= 2)
                             {
-                                fetchedId = lines[1].Trim();
+                                fetchedId = lines[lines.Length - 1].Trim();
                             }
                         }
                     }
