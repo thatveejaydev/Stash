@@ -79,12 +79,16 @@ namespace MediaDownloader
 
         public static string BuildArguments(DownloadQueueItem item, string ffmpegPath)
         {
-            string outputTemplate = !string.IsNullOrEmpty(item.CustomBaseFileName)
-                ? Path.Combine(item.OutputFolder, item.CustomBaseFileName.Replace("%", "%%") + ".%(ext)s")
-                : Path.Combine(item.OutputFolder, "%(title).180B.%(ext)s");
+            string safeCustomName = !string.IsNullOrEmpty(item.CustomBaseFileName)
+                ? StorageFileService.SanitizeFileName(item.CustomBaseFileName)
+                : null;
+
+            string outputTemplate = !string.IsNullOrEmpty(safeCustomName)
+                ? Path.Combine(item.OutputFolder, safeCustomName.Replace("%", "%%") + ".%(ext)s")
+                : Path.Combine(item.OutputFolder, "%(title).100B.%(ext)s");
 
             StringBuilder args = new StringBuilder();
-            args.Append("--newline --no-colors --progress --no-playlist --continue ");
+            args.Append("--newline --no-colors --progress --no-playlist --continue --windows-filenames --trim-filenames 120 ");
 
             // Multi-Connection Turbo Downloading: concurrent DASH/HLS fragments + chunked HTTP Range requests to bypass single-stream server throttling
             if (item.ConcurrentFragments > 1)
