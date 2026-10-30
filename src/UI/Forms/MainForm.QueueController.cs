@@ -103,7 +103,7 @@ namespace MediaDownloader
                     string ffmpegUrl = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
                     await ExternalToolService.DownloadFileAsync(ffmpegUrl, zipPath);
 
-                    AppendLog("Extracting ffmpeg.exe and ffprobe.exe into ./bin...");
+                    AppendLog("Extracting ffmpeg.exe and ffprobe.exe into " + binFolder + "...");
                     lblToolsStatus.Text = "● Extracting FFmpeg...";
                     await Task.Run(() =>
                     {

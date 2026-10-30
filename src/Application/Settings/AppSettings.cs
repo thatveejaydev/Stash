@@ -57,13 +57,13 @@ namespace MediaDownloader
         public bool EmbedSubtitles { get; set; }
         public bool IncludeAutoCaptions { get; set; }
 
-        private static string GetSettingsPath()
-        {
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.cfg");
-        }
+        private readonly string settingsPath;
 
-        public AppSettings()
+        public AppSettings() : this(AppPaths.Current.SettingsPath) { }
+
+        internal AppSettings(string settingsPath)
         {
+            this.settingsPath = settingsPath;
             string defaultDownloads = GetDownloadsFolder();
 
             CurrentOutputFolder = defaultDownloads;
@@ -128,10 +128,15 @@ namespace MediaDownloader
 
         public static AppSettings Load()
         {
-            AppSettings s = new AppSettings();
+            return Load(AppPaths.Current.SettingsPath);
+        }
+
+        internal static AppSettings Load(string settingsPath)
+        {
+            AppSettings s = new AppSettings(settingsPath);
             try
             {
-                string path = GetSettingsPath();
+                string path = settingsPath;
                 if (!File.Exists(path)) { s.Save(); return s; }
 
                 List<string> loadedHistory = new List<string>();
@@ -200,7 +205,8 @@ namespace MediaDownloader
                 {
                     sb.AppendLine("RecentFolder=" + SerializeFolder(dir));
                 }
-                File.WriteAllText(GetSettingsPath(), sb.ToString(), Encoding.UTF8);
+                Directory.CreateDirectory(Path.GetDirectoryName(settingsPath));
+                File.WriteAllText(settingsPath, sb.ToString(), Encoding.UTF8);
             }
             catch { }
         }

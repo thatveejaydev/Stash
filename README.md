@@ -58,6 +58,14 @@ Stash is built on top of two open-source tools:
 
 **In short:** Copy any link, press `Ctrl+V`, and let Stash handle the rest — fast, organized, and at the best quality available.
 
+## Settings and engines
+
+Stash stores preferences in `%LocalAppData%\Stash\settings.cfg` and its download engines in `%LocalAppData%\Stash\bin`. Windows resolves Local AppData for the signed-in user; no username or drive letter is embedded in the application.
+
+On first launch, existing settings and engines beside the EXE are migrated automatically. Existing AppData files take priority. Successfully migrated originals are removed when writable; read-only originals and unrelated files are left alone.
+
+Moving the EXE, including onto a flash drive, keeps the same preferences and engines for that Windows account. Another computer or account uses its own storage and requires engine installation if none are present. The **Install yt-dlp + FFmpeg** button downloads engines into Local AppData.
+
 ## 🔨 How to Build the Windows EXE
 
 Run `build.bat` from Command Prompt or PowerShell:

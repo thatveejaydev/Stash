@@ -267,6 +267,7 @@ internal static class DownloadManagerTests
         }
         testFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(testFolder);
+        AppDataStorageTests.Run(Path.Combine(testFolder, "storage"));
         UiContext context = new UiContext();
         SynchronizationContext.SetSynchronizationContext(context);
         Task tests = RunAll();

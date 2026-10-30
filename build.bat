@@ -11,8 +11,6 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-if not exist "%~dp0bin" mkdir "%~dp0bin"
-
 "%CSC%" /target:winexe ^
         /out:"%~dp0Stash.exe" ^
         /win32icon:"%~dp0src\app.ico" ^

@@ -12,27 +12,7 @@ namespace MediaDownloader
     {
         public static string FindExecutable(string binFolder, string exeName)
         {
-            string localBin = Path.Combine(binFolder, exeName);
-            if (File.Exists(localBin)) return localBin;
-
-            string localRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, exeName);
-            if (File.Exists(localRoot)) return localRoot;
-
-            string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-            foreach (string dir in pathEnv.Split(Path.PathSeparator))
-            {
-                try
-                {
-                    if (!string.IsNullOrWhiteSpace(dir))
-                    {
-                        string candidate = Path.Combine(dir.Trim(), exeName);
-                        if (File.Exists(candidate)) return candidate;
-                    }
-                }
-                catch { }
-            }
-
-            return localBin;
+            return Path.Combine(binFolder, exeName);
         }
 
         public static void KillProcessTree(int pid)

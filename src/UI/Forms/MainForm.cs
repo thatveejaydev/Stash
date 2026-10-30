@@ -160,8 +160,7 @@ namespace MediaDownloader
 
         private void InitializePaths()
         {
-            string appDir = AppDomain.CurrentDomain.BaseDirectory;
-            binFolder = Path.Combine(appDir, "bin");
+            binFolder = AppPaths.Current.EnginesDirectory;
             if (!Directory.Exists(binFolder))
             {
                 Directory.CreateDirectory(binFolder);
