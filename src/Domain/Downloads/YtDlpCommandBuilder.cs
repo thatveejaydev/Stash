@@ -162,6 +162,23 @@ namespace MediaDownloader
             }
 
             args.AppendFormat("-o \"{0}\" ", outputTemplate);
+
+            // Soft subtitles: embedded as toggleable tracks (not burned in). Video containers only.
+            bool isVideoMode = (item.Mode == DownloadMode.BestVideoAndAudioMp4 || item.Mode == DownloadMode.BestVideoAndAudioMkv);
+            if (isVideoMode && (item.EmbedSubtitles || item.IncludeAutoCaptions))
+            {
+                if (item.EmbedSubtitles) args.Append("--write-subs ");
+                if (item.IncludeAutoCaptions) args.Append("--write-auto-subs ");
+
+                // Creator subtitles: every language. Auto-captions: limit to English + the video's original
+                // language, otherwise YouTube's machine translations would add 100+ tracks.
+                string subLangs = item.IncludeAutoCaptions ? "en,en-US,en-GB,.*-orig,-live_chat" : "all,-live_chat";
+                args.AppendFormat("--sub-langs \"{0}\" --convert-subs srt --embed-subs --compat-options no-keep-subs ", subLangs);
+
+                // A failed subtitle fetch (e.g. HTTP 429 on captions) should not fail the whole video.
+                args.Append("--ignore-errors ");
+            }
+
             args.AppendFormat("\"{0}\"", item.Url.Replace("\"", ""));
 
             return args.ToString();

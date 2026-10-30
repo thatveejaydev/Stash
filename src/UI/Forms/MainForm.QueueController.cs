@@ -217,6 +217,13 @@ namespace MediaDownloader
                 concurrentFragments,
                 badgeLabel,
                 outFolder);
+            item.EmbedSubtitles = settings.EmbedSubtitles;
+            item.IncludeAutoCaptions = settings.IncludeAutoCaptions;
+            bool isVideoMode = (mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv);
+            if (isVideoMode && (item.EmbedSubtitles || item.IncludeAutoCaptions))
+            {
+                item.BadgeLabel += "   ·   SUBS";
+            }
 
             lock (queueLock)
             {

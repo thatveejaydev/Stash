@@ -14,6 +14,8 @@ namespace MediaDownloader
         public VideoResolution Resolution { get; set; }
         public bool EmbedMetadata { get; set; }
         public bool EmbedThumbnail { get; set; }
+        public bool EmbedSubtitles { get; set; }
+        public bool IncludeAutoCaptions { get; set; }
         public int ConcurrentFragments { get; set; }
         public string BadgeLabel { get; set; }
         public string OutputFolder { get; set; }

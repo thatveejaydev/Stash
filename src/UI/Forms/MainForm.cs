@@ -187,6 +187,14 @@ namespace MediaDownloader
             return "None";
         }
 
+        private string GetSubtitlesShortDisplayName()
+        {
+            if (settings.EmbedSubtitles && settings.IncludeAutoCaptions) return "On + Auto";
+            if (settings.EmbedSubtitles) return "On";
+            if (settings.IncludeAutoCaptions) return "Auto Only";
+            return "Off";
+        }
+
         private string GetOptionsSummaryLabel()
         {
             return "Options";
@@ -697,15 +705,15 @@ namespace MediaDownloader
             }
         }
 
-        // Nested Dropdown containing "Embed", "Parallel", and "Turbo" submenus inside a single Region-shaped popup
+        // Nested Dropdown containing "Subtitles", "Embed", "Parallel", and "Turbo" submenus inside a single Region-shaped popup
         private void ShowOptionsNestedPopup()
         {
             int leftWidth = Dpi.Px(225);
-            int leftHeight = 3 * Dpi.Px(34) + Dpi.Px(8); // 110
+            int leftHeight = 4 * Dpi.Px(34) + Dpi.Px(8); // 144
             int gap = Dpi.Px(4);
-            int rightMaxWidth = Dpi.Px(235);
+            int rightMaxWidth = Dpi.Px(250);
             int totalWidth = leftWidth + gap + rightMaxWidth;
-            int totalHeight = Dpi.Px(34) + (6 * Dpi.Px(46) + Dpi.Px(8)) + Dpi.Px(8); // Enough height for 6 two-line rows in Parallel & 5 in Turbo
+            int totalHeight = Dpi.Px(102) + (6 * Dpi.Px(46) + Dpi.Px(8)) + Dpi.Px(16); // Accommodate 4 parent rows + child submenus aligned up to alignY=102
 
             Panel rootContainer = new Panel
             {
@@ -770,6 +778,17 @@ namespace MediaDownloader
                 popup.Region = reg;
             };
 
+            PopupMenuRow rowSubtitles = new PopupMenuRow(
+                "Subtitles",
+                GetSubtitlesShortDisplayName() + "   ◂",
+                null,
+                false,
+                "")
+            {
+                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
+                Width = leftWidth - Dpi.Px(8)
+            };
+
             PopupMenuRow rowEmbed = new PopupMenuRow(
                 "Embed",
                 GetEmbedShortDisplayName() + "   ◂",
@@ -777,7 +796,7 @@ namespace MediaDownloader
                 false,
                 "")
             {
-                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
+                Location = new Point(Dpi.Px(4), Dpi.Px(38)),
                 Width = leftWidth - Dpi.Px(8)
             };
 
@@ -788,7 +807,7 @@ namespace MediaDownloader
                 false,
                 "")
             {
-                Location = new Point(Dpi.Px(4), Dpi.Px(38)),
+                Location = new Point(Dpi.Px(4), Dpi.Px(72)),
                 Width = leftWidth - Dpi.Px(8)
             };
 
@@ -799,7 +818,7 @@ namespace MediaDownloader
                 false,
                 "")
             {
-                Location = new Point(Dpi.Px(4), Dpi.Px(72)),
+                Location = new Point(Dpi.Px(4), Dpi.Px(106)),
                 Width = leftWidth - Dpi.Px(8)
             };
 
@@ -810,9 +829,11 @@ namespace MediaDownloader
                 if (currentSubmenuIndex == index && pnlRightHost.Visible) return;
                 currentSubmenuIndex = index;
 
+                rowSubtitles.IsSelected = (ownerRow == rowSubtitles);
                 rowEmbed.IsSelected = (ownerRow == rowEmbed);
                 rowParallel.IsSelected = (ownerRow == rowParallel);
                 rowTurbo.IsSelected = (ownerRow == rowTurbo);
+                rowSubtitles.Invalidate();
                 rowEmbed.Invalidate();
                 rowParallel.Invalidate();
                 rowTurbo.Invalidate();
@@ -829,23 +850,32 @@ namespace MediaDownloader
                 updatePopupRegion();
             };
 
+            Action openSubtitles = () =>
+            {
+                Panel sub = BuildSubtitlesSubmenuPanel(rowSubtitles);
+                showSubmenu(0, rowSubtitles, sub, 0);
+            };
+
             Action openEmbed = () =>
             {
                 Panel sub = BuildEmbedSubmenuPanel(rowEmbed);
-                showSubmenu(0, rowEmbed, sub, 0);
+                showSubmenu(1, rowEmbed, sub, Dpi.Px(34));
             };
 
             Action openParallel = () =>
             {
                 Panel sub = BuildParallelSubmenuPanel(rowParallel, () => popup.Close());
-                showSubmenu(1, rowParallel, sub, 34);
+                showSubmenu(2, rowParallel, sub, Dpi.Px(68));
             };
 
             Action openTurbo = () =>
             {
                 Panel sub = BuildTurboSubmenuPanel(rowTurbo, () => popup.Close());
-                showSubmenu(2, rowTurbo, sub, 68);
+                showSubmenu(3, rowTurbo, sub, Dpi.Px(102));
             };
+
+            rowSubtitles.MouseEnter += (s, e) => openSubtitles();
+            rowSubtitles.MouseDown += (s, e) => openSubtitles();
 
             rowEmbed.MouseEnter += (s, e) => openEmbed();
             rowEmbed.MouseDown += (s, e) => openEmbed();
@@ -856,6 +886,7 @@ namespace MediaDownloader
             rowTurbo.MouseEnter += (s, e) => openTurbo();
             rowTurbo.MouseDown += (s, e) => openTurbo();
 
+            pnlLeft.Controls.Add(rowSubtitles);
             pnlLeft.Controls.Add(rowEmbed);
             pnlLeft.Controls.Add(rowParallel);
             pnlLeft.Controls.Add(rowTurbo);
@@ -868,6 +899,73 @@ namespace MediaDownloader
             popup.Closed += (s, e) => selOptions.SetOpenState(false);
             selOptions.SetOpenState(true);
             popup.Show(selOptions, new Point(selOptions.Width - popup.Width, selOptions.Height + Dpi.Px(2)));
+        }
+
+        private Panel BuildSubtitlesSubmenuPanel(PopupMenuRow parentRow)
+        {
+            int width = Dpi.Px(250);
+            int rowH = Dpi.Px(46);
+            Panel container = new Panel
+            {
+                BackColor = Theme.BgSurface,
+                Width = width,
+                Height = 2 * rowH + Dpi.Px(8)
+            };
+            container.Paint += (s, e) =>
+            {
+                using (Pen p = new Pen(Theme.BorderHover, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
+                }
+            };
+
+            PopupMenuRow rowSubs = new PopupMenuRow(
+                "Creator Subtitles",
+                null,
+                "All languages, toggle on/off in player",
+                settings.EmbedSubtitles,
+                settings.EmbedSubtitles ? "☑" : "☐")
+            {
+                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
+                Width = width - Dpi.Px(8)
+            };
+            rowSubs.MouseDown += (s, e) =>
+            {
+                settings.EmbedSubtitles = !settings.EmbedSubtitles;
+                settings.Save();
+                rowSubs.IsSelected = settings.EmbedSubtitles;
+                rowSubs.CheckGlyph = settings.EmbedSubtitles ? "☑" : "☐";
+                rowSubs.Invalidate();
+                parentRow.RightBadgeText = GetSubtitlesShortDisplayName() + "   ◂";
+                parentRow.Invalidate();
+                selOptions.SetValueLabel(GetOptionsSummaryLabel());
+            };
+
+            PopupMenuRow rowAuto = new PopupMenuRow(
+                "Auto-Generated Captions",
+                null,
+                "English + original language",
+                settings.IncludeAutoCaptions,
+                settings.IncludeAutoCaptions ? "☑" : "☐")
+            {
+                Location = new Point(Dpi.Px(4), Dpi.Px(4) + rowH),
+                Width = width - Dpi.Px(8)
+            };
+            rowAuto.MouseDown += (s, e) =>
+            {
+                settings.IncludeAutoCaptions = !settings.IncludeAutoCaptions;
+                settings.Save();
+                rowAuto.IsSelected = settings.IncludeAutoCaptions;
+                rowAuto.CheckGlyph = settings.IncludeAutoCaptions ? "☑" : "☐";
+                rowAuto.Invalidate();
+                parentRow.RightBadgeText = GetSubtitlesShortDisplayName() + "   ◂";
+                parentRow.Invalidate();
+                selOptions.SetValueLabel(GetOptionsSummaryLabel());
+            };
+
+            container.Controls.Add(rowSubs);
+            container.Controls.Add(rowAuto);
+            return container;
         }
 
         private Panel BuildEmbedSubmenuPanel(PopupMenuRow parentRow)

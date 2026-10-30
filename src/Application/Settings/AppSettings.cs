@@ -54,6 +54,8 @@ namespace MediaDownloader
         public bool EmbedThumbnail { get; set; }
         public int ParallelCount { get; set; }
         public int ConcurrentFragments { get; set; }
+        public bool EmbedSubtitles { get; set; }
+        public bool IncludeAutoCaptions { get; set; }
 
         private static string GetSettingsPath()
         {
@@ -72,6 +74,8 @@ namespace MediaDownloader
             EmbedThumbnail = true;
             ParallelCount = 2;
             ConcurrentFragments = 8; // Default 8x Multi-Connection Turbo
+            EmbedSubtitles = true;
+            IncludeAutoCaptions = true;
         }
 
         public void AddFolderToHistory(string folder)
@@ -162,6 +166,10 @@ namespace MediaDownloader
                         s.ParallelCount = Math.Max(1, Math.Min(6, parsedInt));
                     else if (key == "ConcurrentFragments" && int.TryParse(val, out parsedInt))
                         s.ConcurrentFragments = Math.Max(1, Math.Min(16, parsedInt));
+                    else if (key == "EmbedSubtitles" && bool.TryParse(val, out parsedBool))
+                        s.EmbedSubtitles = parsedBool;
+                    else if (key == "IncludeAutoCaptions" && bool.TryParse(val, out parsedBool))
+                        s.IncludeAutoCaptions = parsedBool;
                 }
 
                 if (loadedHistory.Count > 0)
@@ -186,6 +194,8 @@ namespace MediaDownloader
                 sb.AppendLine("EmbedThumbnail=" + EmbedThumbnail);
                 sb.AppendLine("ParallelCount=" + ParallelCount);
                 sb.AppendLine("ConcurrentFragments=" + ConcurrentFragments);
+                sb.AppendLine("EmbedSubtitles=" + EmbedSubtitles);
+                sb.AppendLine("IncludeAutoCaptions=" + IncludeAutoCaptions);
                 foreach (string dir in RecentFolders)
                 {
                     sb.AppendLine("RecentFolder=" + SerializeFolder(dir));
