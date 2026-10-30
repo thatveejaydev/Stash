@@ -81,7 +81,7 @@ namespace MediaDownloader
                     Execution execution = new Execution();
                     running.Add(item, execution);
                     item.Status = QueueItemStatus.FetchingInfo;
-                    item.StatusText = "Fetching info...";
+                    item.StatusText = "Checking source";
                     execution.Completion = ExecuteAsync(item, execution, ytDlpPath, ffmpegPath);
                 }
             }
@@ -246,10 +246,13 @@ namespace MediaDownloader
             // A pause/cancel can arrive while the rename dialog is open too.
             token.ThrowIfCancellationRequested();
             item.Status = QueueItemStatus.Downloading;
-            item.StatusText = item.ProgressPercent > 0 ? "Resuming..." : "Starting...";
+            item.StatusText = "Preparing files";
             NotifyChanged();
             Directory.CreateDirectory(item.TemporaryFolder);
+            token.ThrowIfCancellationRequested();
             string arguments = YtDlpCommandBuilder.BuildArguments(item, ffmpeg);
+            item.StatusText = "Checking source";
+            NotifyChanged();
             WriteLog(string.Format("[{0}] yt-dlp {1}", item.Id, arguments));
             int exitCode;
             using (ProgressOutputBuffer output = new ProgressOutputBuffer((line, error) => PostOutput(item, execution, line, error)))
@@ -260,6 +263,14 @@ namespace MediaDownloader
             token.ThrowIfCancellationRequested();
             if (exitCode == 0)
             {
+                // Let already-posted output finish before showing the final cleanup stage.
+                await Task.Yield();
+                token.ThrowIfCancellationRequested();
+                item.Status = QueueItemStatus.Merging;
+                item.StatusText = "Finalizing output";
+                item.Speed = "—";
+                item.Eta = "—";
+                NotifyChanged();
                 await StorageFileService.CleanupPartialFilesForItemAsync(item);
                 token.ThrowIfCancellationRequested();
                 item.ProgressPercent = 100;

@@ -101,7 +101,10 @@ namespace MediaDownloader
                     using (SolidBrush brush = new SolidBrush(Theme.BrandPurple)) g.FillPath(brush, path);
                 }
                 string telemetry = string.Format("{0:0}%", percent);
-                if (item.Status == QueueItemStatus.Downloading) telemetry += "   ·   " + item.Speed + "   ·   " + item.Eta + " remaining";
+                bool waiting = item.Status == QueueItemStatus.FetchingInfo || item.Status == QueueItemStatus.Merging ||
+                    item.StatusText == "Checking source" || item.StatusText == "Preparing files";
+                if (waiting) telemetry = "Please wait…";
+                if (item.Status == QueueItemStatus.Downloading && !waiting) telemetry += "   ·   " + item.Speed + "   ·   " + item.Eta + " remaining";
                 TextRenderer.DrawText(g, telemetry, detail, new Rectangle(track.X, rect.Y + Dpi.Px(78), Math.Max(Dpi.Px(1), track.Width - Dpi.Px(item.Status == QueueItemStatus.Cancelled ? 190 : 110)), Dpi.Px(20)), Theme.TextSecondary, flags);
                 if (item.Status == QueueItemStatus.Cancelled)
                 {

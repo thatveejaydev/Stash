@@ -63,6 +63,13 @@ namespace MediaDownloader
             if (line.StartsWith("STASH_FINAL:", StringComparison.Ordinal))
             {
                 item.OutputFilePath = line.Substring("STASH_FINAL:".Length).Trim();
+                SetWaitingStage(item, QueueItemStatus.Merging, "Finalizing output", onUiChanged);
+                return;
+            }
+            if (line.StartsWith("[info]", StringComparison.OrdinalIgnoreCase) &&
+                line.IndexOf("format", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                SetWaitingStage(item, QueueItemStatus.FetchingInfo, "Resolving best format", onUiChanged);
                 return;
             }
             Match destMatch = DestinationRegex.Match(line);
@@ -112,6 +119,11 @@ namespace MediaDownloader
             }
 
             Match progMatch = ProgressRegex.Match(line);
+            if (line.StartsWith("[download] Destination:", StringComparison.OrdinalIgnoreCase))
+            {
+                SetWaitingStage(item, QueueItemStatus.FetchingInfo, "Preparing files", onUiChanged);
+                return;
+            }
             if (progMatch.Success)
             {
                 double pct;
@@ -140,6 +152,15 @@ namespace MediaDownloader
         {
             return !string.IsNullOrWhiteSpace(codec) && !codec.Equals("none", StringComparison.OrdinalIgnoreCase)
                 && !codec.Equals("NA", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void SetWaitingStage(DownloadQueueItem item, QueueItemStatus status, string text, Action changed)
+        {
+            item.Status = status;
+            item.StatusText = text;
+            item.Speed = "—";
+            item.Eta = "—";
+            if (changed != null) changed();
         }
     }
 }

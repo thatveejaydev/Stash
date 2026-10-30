@@ -290,6 +290,15 @@ internal static class DownloadManagerTests
         }
         testFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(testFolder);
+        DownloadQueueItem stageItem = Item();
+        YtDlpOutputParser.ParseLine(stageItem, "[info] test: Downloading 1 format(s): 137+140", null, null);
+        Assert(stageItem.StatusText == "Resolving best format", "Format selection should be visible");
+        YtDlpOutputParser.ParseLine(stageItem, "[download] Destination: test.mp4", null, null);
+        Assert(stageItem.StatusText == "Preparing files" && stageItem.OutputFilePath == "test.mp4", "Preparation must retain destination tracking");
+        YtDlpOutputParser.ParseLine(stageItem, "STASH_PROGRESS:avc1|none|15%|1MiB/s|00:10", null, null);
+        Assert(stageItem.StatusText == "Downloading video" && stageItem.Status == QueueItemStatus.Downloading, "Progress should replace waiting state");
+        YtDlpOutputParser.ParseLine(stageItem, "STASH_FINAL:finished.mp4", null, null);
+        Assert(stageItem.StatusText == "Finalizing output" && stageItem.OutputFilePath == "finished.mp4", "Finalization must retain output path");
         List<string> buffered = new List<string>();
         using (ProgressOutputBuffer buffer = new ProgressOutputBuffer((line, error) => buffered.Add(line)))
         {
