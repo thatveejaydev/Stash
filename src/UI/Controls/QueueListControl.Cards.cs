@@ -7,6 +7,14 @@ namespace MediaDownloader
 {
     public partial class QueueListControl
     {
+        private readonly Font cardTitleFont = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+        private readonly Font cardDetailFont = new Font("Segoe UI", 8.5F);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { cardTitleFont.Dispose(); cardDetailFont.Dispose(); }
+            base.Dispose(disposing);
+        }
         private Rectangle GetErrorActionRect(Rectangle row, int action)
         {
             return new Rectangle(row.Right - Dpi.Px(260) + action * Dpi.Px(84), row.Bottom - Dpi.Px(34), Dpi.Px(78), Dpi.Px(26));
@@ -54,9 +62,9 @@ namespace MediaDownloader
             if (item.Status == QueueItemStatus.Error || item.Status == QueueItemStatus.Cancelled) statusColor = Theme.AccentDanger;
             else if (item.Status == QueueItemStatus.Paused) statusColor = Theme.AccentWarning;
             else if (item.Status == QueueItemStatus.Queued || item.Status == QueueItemStatus.FetchingInfo) statusColor = Theme.TextSecondary;
-            using (Font title = new Font("Segoe UI Semibold", 10F, FontStyle.Bold))
-            using (Font detail = new Font("Segoe UI", 8.5F))
             {
+                Font title = cardTitleFont;
+                Font detail = cardDetailFont;
                 TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
                 TextRenderer.DrawText(g, item.Title, title, new Rectangle(textX, rect.Y + Dpi.Px(10), textWidth, Dpi.Px(23)), Theme.TextPrimary, flags);
                 string subtitle = completed ? YtDlpCommandBuilder.GetTargetExtension(item.Mode).TrimStart('.').ToUpperInvariant() + "   ·   Completed" : item.BadgeLabel;

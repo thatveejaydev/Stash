@@ -290,6 +290,16 @@ internal static class DownloadManagerTests
         }
         testFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(testFolder);
+        List<string> buffered = new List<string>();
+        using (ProgressOutputBuffer buffer = new ProgressOutputBuffer((line, error) => buffered.Add(line)))
+        {
+            for (int i = 0; i < 1000; i++) buffer.Add("STASH_PROGRESS:" + i, false);
+            buffer.Add("[Merger] starting", false);
+            Assert(buffered.Count < 1000 && buffered[buffered.Count - 2] == "STASH_PROGRESS:999" &&
+                buffered[buffered.Count - 1] == "[Merger] starting", "Coalesced progress preserves latest update before stage change");
+            buffer.Add("STASH_PROGRESS:final", false);
+        }
+        Assert(buffered[buffered.Count - 1] == "STASH_PROGRESS:final", "Disposal flushes final buffered progress");
         DownloadQueueItem progressItem = Item();
         YtDlpOutputParser.ParseLine(progressItem, "STASH_PROGRESS:avc1|none|100.0%|1.00MiB/s|00:00", null, null);
         Assert(progressItem.StatusText == "Downloading video" && progressItem.ProgressPercent == 100, "Video stage");

@@ -31,9 +31,5 @@ if exist "%~dp0dist" (
     copy /Y "%~dp0Stash.exe" "%~dp0dist\Stash.exe" >nul
 )
 
-if exist "D:\003 - PROGRAMMING\Tools\Stash" (
-    copy /Y "%~dp0Stash.exe" "D:\003 - PROGRAMMING\Tools\Stash\Stash.exe" >nul
-)
-
 echo [SUCCESS] Built standalone executable: %~dp0Stash.exe
 exit /b 0

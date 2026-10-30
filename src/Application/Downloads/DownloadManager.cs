@@ -33,6 +33,7 @@ namespace MediaDownloader
         public event Action Changed;
         public event Action ProgressChanged;
         public event Action<string> Log;
+        public event Action<string> ErrorLog;
 
         public DownloadManager(IDownloadProcessRunner processRunner,
             Func<DownloadQueueItem, string, string, bool> confirmFileName)
@@ -172,6 +173,7 @@ namespace MediaDownloader
         private void Fail(DownloadQueueItem item, string details)
         {
             item.Failure = DownloadFailure.Create(item.Status == QueueItemStatus.Merging ? "Merging" : item.Status == QueueItemStatus.FetchingInfo ? "Fetching video information" : "Downloading", item.ErrorOutput + "\n" + details);
+            if (ErrorLog != null) ErrorLog(string.Format("[{0}] {1}\n{2}", item.Id, item.Title, item.Failure.TechnicalDetails));
             item.Status = QueueItemStatus.Error;
             item.StatusText = "Download failed";
         }
@@ -249,9 +251,12 @@ namespace MediaDownloader
             Directory.CreateDirectory(item.TemporaryFolder);
             string arguments = YtDlpCommandBuilder.BuildArguments(item, ffmpeg);
             WriteLog(string.Format("[{0}] yt-dlp {1}", item.Id, arguments));
-            int exitCode = await processRunner.RunAsync(executable, arguments, token,
-                line => PostOutput(item, execution, line, false),
-                line => PostOutput(item, execution, line, true));
+            int exitCode;
+            using (ProgressOutputBuffer output = new ProgressOutputBuffer((line, error) => PostOutput(item, execution, line, error)))
+            {
+                exitCode = await processRunner.RunAsync(executable, arguments, token,
+                    line => output.Add(line, false), line => output.Add(line, true));
+            }
             token.ThrowIfCancellationRequested();
             if (exitCode == 0)
             {
@@ -345,7 +350,10 @@ namespace MediaDownloader
                 int deleted = await StorageFileService.CleanupPartialFilesForItemAsync(item);
                 if (deleted > 0) WriteLog(string.Format("[{0}] Cleaned up {1} temporary fragment file(s).", item.Id, deleted));
             }
-            catch (Exception ex) { WriteLog(string.Format("[{0}] Cleanup failed: {1}", item.Id, ex.Message)); }
+            catch (Exception ex)
+            {
+                if (ErrorLog != null) ErrorLog(string.Format("[{0}] Cleanup failed: {1}", item.Id, ex));
+            }
         }
 
         private void VerifyThread()

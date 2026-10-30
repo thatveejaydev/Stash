@@ -6,25 +6,6 @@ namespace MediaDownloader
 {
     public static class DownloadUrlValidator
     {
-        // Validate whether the link is a single valid URL
-        public static bool IsValid(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return false;
-            string value = input.Trim();
-            if (!value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                && !value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return false;
-            foreach (char c in value)
-            {
-                if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '"' || c == '\\')
-                    return false;
-            }
-
-            Uri uri;
-            return Uri.TryCreate(value, UriKind.Absolute, out uri)
-                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                && !string.IsNullOrEmpty(uri.Host);
-        }
-
         // Extract all valid HTTP/HTTPS URLs from any text (single link, list of links, or paragraph)
         public static List<string> ExtractUrls(string input)
         {

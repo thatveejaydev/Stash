@@ -75,41 +75,5 @@ namespace MediaDownloader
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
 
-        private void DrawClipboardPasteIcon(Graphics g, Point center, Color fg, Color bg)
-        {
-            // Crisp Clipboard + Down Arrow icon
-            Rectangle boardRect = new Rectangle(center.X - Dpi.Px(6), center.Y - Dpi.Px(6), Dpi.Px(12), Dpi.Px(14));
-            using (Pen p = new Pen(fg, 1.6f))
-            using (GraphicsPath boardPath = Theme.CreateRoundedRectangle(boardRect, 2))
-            {
-                g.DrawPath(p, boardPath);
-            }
-
-            // Top clip tab
-            Rectangle clipClear = new Rectangle(center.X - Dpi.Px(4), center.Y - Dpi.Px(8), Dpi.Px(8), Dpi.Px(4));
-            using (SolidBrush clearBrush = new SolidBrush(bg))
-            {
-                g.FillRectangle(clearBrush, clipClear);
-            }
-            Rectangle clipRect = new Rectangle(center.X - Dpi.Px(3), center.Y - Dpi.Px(8), Dpi.Px(6), Dpi.Px(3));
-            using (Pen p = new Pen(fg, 1.5f))
-            using (GraphicsPath clipPath = Theme.CreateRoundedRectangle(clipRect, 1))
-            {
-                g.DrawPath(p, clipPath);
-            }
-
-            // Downward arrow inside the clipboard
-            using (Pen arrowPen = new Pen(fg, 1.5f))
-            {
-                arrowPen.StartCap = LineCap.Round;
-                arrowPen.EndCap = LineCap.Round;
-                int ax = center.X;
-                int topY = center.Y - 2;
-                int botY = center.Y + 4;
-                g.DrawLine(arrowPen, ax, topY, ax, botY);
-                g.DrawLine(arrowPen, ax - Dpi.Px(2), botY - Dpi.Px(2), ax, botY);
-                g.DrawLine(arrowPen, ax + Dpi.Px(2), botY - Dpi.Px(2), ax, botY);
-            }
-        }
     }
 }

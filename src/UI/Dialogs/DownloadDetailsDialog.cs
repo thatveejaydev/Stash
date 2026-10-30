@@ -55,7 +55,7 @@ namespace MediaDownloader
             CardPanel technicalPanel = new CardPanel { Size = new Size(Dpi.Px(580), Dpi.Px(140)), Padding = new Padding(Dpi.Px(12)), Visible = false, Margin = Padding.Empty, CardFillColor = Theme.BgInput };
             Label technicalCaption = new Label { Text = "Original error message", Dock = DockStyle.Top, Height = Dpi.Px(24), ForeColor = Theme.TextMuted };
             RichTextBox technical = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None, DetectUrls = false, Text = failure.TechnicalDetails, BackColor = Theme.BgInput, ForeColor = Theme.TextSecondary, Font = new Font("Consolas", 9F), AccessibleName = "Original error message" };
-            technicalPanel.Controls.Add(new DarkConsoleScrollHost(technical)); technicalPanel.Controls.Add(technicalCaption);
+            technicalPanel.Controls.Add(new DarkRichTextScrollHost(technical)); technicalPanel.Controls.Add(technicalCaption);
             content.Controls.Add(technicalPanel);
             viewport.Controls.Add(content);
             Controls.Add(viewport); Controls.Add(footer);

@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace MediaDownloader
 {
-    public class DarkConsoleScrollHost : Panel
+    public class DarkRichTextScrollHost : Panel
     {
         [StructLayout(LayoutKind.Sequential)] private struct ScrollPoint { public int X, Y; }
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -13,7 +13,7 @@ namespace MediaDownloader
         private readonly RichTextBox editor;
         private readonly DarkScrollBar bar;
         private bool syncing;
-        public DarkConsoleScrollHost(RichTextBox textBox)
+        public DarkRichTextScrollHost(RichTextBox textBox)
         {
             editor = textBox; Dock = DockStyle.Fill; BackColor = editor.BackColor;
             editor.ScrollBars = RichTextBoxScrollBars.None;
