@@ -47,6 +47,19 @@ namespace MediaDownloader
             Invalidate();
         }
 
+        public void InsertItemsAtTop(IList<DownloadQueueItem> newItems)
+        {
+            if (newItems == null || newItems.Count == 0) return;
+            for (int i = newItems.Count - 1; i >= 0; i--)
+            {
+                items.Insert(0, newItems[i]);
+            }
+            SelectedItem = newItems[0];
+            UpdateScrollBar();
+            if (scrollBar.Visible) scrollBar.Value = 0;
+            Invalidate();
+        }
+
         public void RemoveItem(DownloadQueueItem item)
         {
             items.Remove(item);

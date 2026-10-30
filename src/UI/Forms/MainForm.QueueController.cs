@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -152,18 +152,21 @@ namespace MediaDownloader
             if (!Clipboard.ContainsText())
             {
                 MessageBox.Show(
-                    "Your clipboard is empty. Copy a video or audio URL first, then click 'Paste Link' or press Ctrl+V.",
+                    "Your clipboard is empty. Copy a video, audio, or playlist link first, then click 'Paste Link' or press Ctrl+V.",
                     "No Link in Clipboard",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 return;
             }
 
-            string rawInput = Clipboard.GetText().Trim();
-            if (!DownloadUrlValidator.IsValid(rawInput))
+            string rawInput = Clipboard.GetText();
+            if (string.IsNullOrWhiteSpace(rawInput)) return;
+
+            List<string> extractedUrls = DownloadUrlValidator.ExtractUrls(rawInput);
+            if (extractedUrls.Count == 0)
             {
                 MessageBox.Show(
-                    "Please copy a valid video or audio link starting with http:// or https://, then try again. Copy only one link at a time.",
+                    "Please copy a valid video, audio, or playlist link starting with http:// or https://, then try again.",
                     "Invalid Link",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
@@ -184,6 +187,49 @@ namespace MediaDownloader
                 }
                 return;
             }
+
+            // Single link that is a playlist
+            if (extractedUrls.Count == 1 && DownloadUrlValidator.IsPlaylistUrl(extractedUrls[0]))
+            {
+                using (PlaylistPromptDialog dlg = new PlaylistPromptDialog(extractedUrls[0], ytDlpPath))
+                {
+                    if (dlg.ShowDialog(this) == DialogResult.OK)
+                    {
+                        QueueUrls(dlg.ResultUrls, dlg.ResultTitles);
+                    }
+                }
+                return;
+            }
+
+            // Multiple links (Batch Paste)
+            if (extractedUrls.Count > 1)
+            {
+                List<string> sanitizedBatch = new List<string>();
+                foreach (string u in extractedUrls)
+                {
+                    string singleUrl;
+                    string videoId;
+                    if (DownloadUrlValidator.TryExtractSingleVideoUrl(u, out singleUrl, out videoId)
+                        && u.IndexOf("list=", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        sanitizedBatch.Add(singleUrl);
+                    }
+                    else
+                    {
+                        sanitizedBatch.Add(u);
+                    }
+                }
+                QueueUrls(sanitizedBatch);
+            }
+            else
+            {
+                QueueUrls(extractedUrls);
+            }
+        }
+
+        private void QueueUrls(IList<string> urls, IList<string> preResolvedTitles = null)
+        {
+            if (urls == null || urls.Count == 0) return;
 
             string outFolder = settings.CurrentOutputFolder;
             if (!Directory.Exists(outFolder))
@@ -207,33 +253,67 @@ namespace MediaDownloader
             bool embedThumb = settings.EmbedThumbnail;
             int concurrentFragments = settings.ConcurrentFragments;
             string badgeLabel = YtDlpCommandBuilder.BuildBadgeLabel(mode, res, embedMeta, embedThumb, concurrentFragments);
-
-            DownloadQueueItem item = new DownloadQueueItem(
-                rawInput,
-                mode,
-                res,
-                embedMeta,
-                embedThumb,
-                concurrentFragments,
-                badgeLabel,
-                outFolder);
-            item.EmbedSubtitles = settings.EmbedSubtitles;
-            item.IncludeAutoCaptions = settings.IncludeAutoCaptions;
             bool isVideoMode = (mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv);
-            if (isVideoMode && (item.EmbedSubtitles || item.IncludeAutoCaptions))
+            if (isVideoMode && (settings.EmbedSubtitles || settings.IncludeAutoCaptions))
             {
-                item.BadgeLabel += "   ·   SUBS";
+                badgeLabel += "   \u00B7   SUBS";
             }
+
+            List<DownloadQueueItem> newItems = new List<DownloadQueueItem>();
+            for (int i = 0; i < urls.Count; i++)
+            {
+                string u = urls[i];
+                if (string.IsNullOrWhiteSpace(u)) continue;
+
+                DownloadQueueItem item = new DownloadQueueItem(
+                    u,
+                    mode,
+                    res,
+                    embedMeta,
+                    embedThumb,
+                    concurrentFragments,
+                    badgeLabel,
+                    outFolder);
+
+                item.EmbedSubtitles = settings.EmbedSubtitles;
+                item.IncludeAutoCaptions = settings.IncludeAutoCaptions;
+
+                if (preResolvedTitles != null && i < preResolvedTitles.Count && !string.IsNullOrWhiteSpace(preResolvedTitles[i]))
+                {
+                    string clean = StorageFileService.SanitizeFileName(preResolvedTitles[i]);
+                    if (!string.IsNullOrEmpty(clean))
+                    {
+                        item.Title = clean;
+                        item.MetadataResolved = true;
+                    }
+                }
+
+                newItems.Add(item);
+            }
+
+            if (newItems.Count == 0) return;
 
             lock (queueLock)
             {
-                queue.Insert(0, item);
+                queue.InsertRange(0, newItems);
             }
 
-            queueListView.InsertItemAtTop(item);
+            queueListView.InsertItemsAtTop(newItems);
             UpdateQueueHeaderStats();
 
-            AppendLog(string.Format("[Queue] Pasted & Added: {0} [{1}] -> {2}", item.Url, item.BadgeLabel, outFolder));
+            if (newItems.Count == 1)
+            {
+                AppendLog(string.Format("[Queue] Pasted & Added: {0} [{1}] -> {2}", newItems[0].Url, newItems[0].BadgeLabel, outFolder));
+            }
+            else
+            {
+                AppendLog(string.Format("[Batch] Detected and queued {0} links from clipboard -> {1}", newItems.Count, outFolder));
+                for (int i = 0; i < newItems.Count; i++)
+                {
+                    AppendLog(string.Format("  [{0}/{1}] {2}", i + 1, newItems.Count, newItems[i].Title != newItems[i].Url ? newItems[i].Title : newItems[i].Url));
+                }
+            }
+
             ProcessQueue();
         }
 
