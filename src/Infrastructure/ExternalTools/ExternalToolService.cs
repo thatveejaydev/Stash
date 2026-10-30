@@ -64,57 +64,6 @@ namespace MediaDownloader
             });
         }
 
-        public static async Task<Tuple<string, string>> FetchMetadataTitleAndIdAsync(string ytDlpPath, DownloadQueueItem item, Action onTitleUpdated)
-        {
-            string fetchedTitle = "";
-            string fetchedId = "";
-            try
-            {
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = ytDlpPath,
-                    Arguments = string.Format("--no-playlist --get-title --get-id --no-warnings \"{0}\"", item.Url.Replace("\"", "")),
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    StandardOutputEncoding = Encoding.UTF8
-                };
-
-                using (Process p = Process.Start(psi))
-                {
-                    Task<string> readAllTask = p.StandardOutput.ReadToEndAsync();
-                    Task completed = await Task.WhenAny(readAllTask, Task.Delay(9000));
-                    if (completed == readAllTask)
-                    {
-                        string raw = await readAllTask;
-                        if (!string.IsNullOrWhiteSpace(raw))
-                        {
-                            string[] lines = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                            if (lines.Length >= 1)
-                            {
-                                fetchedTitle = StorageFileService.SanitizeFileName(lines[0].Trim());
-                                if (!string.IsNullOrEmpty(fetchedTitle))
-                                {
-                                    item.Title = fetchedTitle;
-                                    if (onTitleUpdated != null) onTitleUpdated();
-                                }
-                            }
-                            if (lines.Length >= 2)
-                            {
-                                fetchedId = lines[lines.Length - 1].Trim();
-                            }
-                        }
-                    }
-                    else
-                    {
-                        KillProcessTree(p.Id);
-                    }
-                }
-            }
-            catch { }
-            return Tuple.Create(fetchedTitle, fetchedId);
-        }
-
         public static async Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl)
         {
             PlaylistInfo info = new PlaylistInfo();

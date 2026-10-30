@@ -36,9 +36,8 @@ namespace MediaDownloader
         private Panel pnlBottomLog;
         private ToolTip appToolTip;
 
-        private readonly List<DownloadQueueItem> queue = new List<DownloadQueueItem>();
-        private readonly object queueLock = new object();
-        private int activeDownloads = 0;
+        private DownloadManager downloadManager;
+        private bool shutdownComplete;
 
         private string binFolder;
         private string ytDlpPath;
@@ -111,6 +110,9 @@ namespace MediaDownloader
             settings = AppSettings.Load();
             InitializePaths();
             InitializeUi();
+            downloadManager = new DownloadManager(new DownloadProcessRunner(), CheckAndPromptForDuplicateRename);
+            downloadManager.Changed += RefreshQueueUi;
+            downloadManager.Log += AppendLog;
             FitInitialWindowToScreen();
             ApplyDarkTitleBar();
             CheckToolsStatus();

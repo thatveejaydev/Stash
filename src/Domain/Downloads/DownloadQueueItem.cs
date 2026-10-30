@@ -1,7 +1,5 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Threading;
 
 namespace MediaDownloader
 {
@@ -21,15 +19,12 @@ namespace MediaDownloader
         public string OutputFolder { get; set; }
         public string TemporaryFolder { get; private set; }
         public string CustomBaseFileName { get; set; }
-        public QueueItemStatus Status { get; set; }
-        public string StatusText { get; set; }
-        public double ProgressPercent { get; set; }
-        public string Speed { get; set; }
-        public string Eta { get; set; }
-        public string OutputFilePath { get; set; }
-        public Process ActiveProcess { get; set; }
-        public CancellationTokenSource CancellationSource { get; set; }
-        public bool IsPauseRequested { get; set; }
+        public QueueItemStatus Status { get; internal set; }
+        public string StatusText { get; internal set; }
+        public double ProgressPercent { get; internal set; }
+        public string Speed { get; internal set; }
+        public string Eta { get; internal set; }
+        public string OutputFilePath { get; internal set; }
         public bool MetadataResolved { get; set; }
         public List<string> TrackedFilePaths { get; set; }
 
@@ -60,8 +55,6 @@ namespace MediaDownloader
             ProgressPercent = 0.0;
             Speed = "—";
             Eta = "—";
-            CancellationSource = new CancellationTokenSource();
-            IsPauseRequested = false;
             MetadataResolved = false;
             TrackedFilePaths = new List<string>();
         }

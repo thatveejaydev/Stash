@@ -1,10 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -293,10 +292,7 @@ namespace MediaDownloader
 
             if (newItems.Count == 0) return;
 
-            lock (queueLock)
-            {
-                queue.InsertRange(0, newItems);
-            }
+            downloadManager.AddItems(newItems);
 
             queueListView.InsertItemsAtTop(newItems);
             UpdateQueueHeaderStats();
@@ -325,6 +321,7 @@ namespace MediaDownloader
                 return;
             }
 
+            List<DownloadQueueItem> queue = downloadManager.GetItems();
             int total = queue.Count;
             int running = queue.FindAll(x => x.Status == QueueItemStatus.Downloading || x.Status == QueueItemStatus.Merging || x.Status == QueueItemStatus.FetchingInfo).Count;
             int done = queue.FindAll(x => x.Status == QueueItemStatus.Completed).Count;
@@ -338,23 +335,7 @@ namespace MediaDownloader
 
         private void ProcessQueue()
         {
-            int maxParallel = settings.ParallelCount;
-
-            lock (queueLock)
-            {
-                while (activeDownloads < maxParallel)
-                {
-                    DownloadQueueItem nextItem = queue.Find(x => x.Status == QueueItemStatus.Queued);
-                    if (nextItem == null) break;
-
-                    nextItem.Status = QueueItemStatus.FetchingInfo;
-                    nextItem.StatusText = "Fetching info...";
-                    activeDownloads++;
-                    RefreshQueueUi();
-
-                    Task.Run(() => ExecuteDownloadAsync(nextItem));
-                }
-            }
+            downloadManager.ProcessQueue(ytDlpPath, ffmpegPath, settings.ParallelCount);
         }
 
         private bool CheckAndPromptForDuplicateRename(DownloadQueueItem item, string fetchedTitle, string fetchedId)
@@ -389,226 +370,14 @@ namespace MediaDownloader
             return accepted;
         }
 
-        private async Task ExecuteDownloadAsync(DownloadQueueItem item)
-        {
-            try
-            {
-                if (!item.MetadataResolved)
-                {
-                    Tuple<string, string> meta = await ExternalToolService.FetchMetadataTitleAndIdAsync(ytDlpPath, item, RefreshQueueUi);
-
-                    if (item.CancellationSource.IsCancellationRequested)
-                    {
-                        if (item.IsPauseRequested) MarkPaused(item);
-                        else MarkCancelled(item);
-                        return;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(meta.Item1))
-                    {
-                        bool proceed = CheckAndPromptForDuplicateRename(item, meta.Item1, meta.Item2);
-                        if (!proceed)
-                        {
-                            MarkCancelled(item);
-                            return;
-                        }
-                        item.MetadataResolved = true;
-                        RefreshQueueUi();
-                    }
-                }
-
-                item.Status = QueueItemStatus.Downloading;
-                item.StatusText = item.ProgressPercent > 0 ? "Resuming..." : "Starting...";
-                RefreshQueueUi();
-
-                Directory.CreateDirectory(item.TemporaryFolder);
-                string arguments = YtDlpCommandBuilder.BuildArguments(item, ffmpegPath);
-                AppendLog(string.Format("[{0}] yt-dlp {1}", item.Id, arguments));
-
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = ytDlpPath,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
-                };
-
-                using (Process proc = new Process { StartInfo = psi, EnableRaisingEvents = true })
-                {
-                    item.ActiveProcess = proc;
-
-                    proc.OutputDataReceived += (s, e) =>
-                    {
-                        if (!string.IsNullOrEmpty(e.Data))
-                        {
-                            YtDlpOutputParser.ParseLine(item, e.Data, RefreshQueueUi, AppendLog);
-                        }
-                    };
-
-                    proc.ErrorDataReceived += (s, e) =>
-                    {
-                        if (!string.IsNullOrEmpty(e.Data))
-                        {
-                            AppendLog(string.Format("[{0} ERR] {1}", item.Id, e.Data));
-                        }
-                    };
-
-                    proc.Start();
-                    proc.BeginOutputReadLine();
-                    proc.BeginErrorReadLine();
-
-                    while (!proc.HasExited)
-                    {
-                        if (item.CancellationSource.IsCancellationRequested)
-                        {
-                            ExternalToolService.KillProcessTree(proc.Id);
-                            if (item.IsPauseRequested) MarkPaused(item);
-                            else MarkCancelled(item);
-                            return;
-                        }
-                        await Task.Delay(150);
-                    }
-
-                    proc.WaitForExit();
-
-                    if (item.CancellationSource.IsCancellationRequested)
-                    {
-                        if (item.IsPauseRequested) MarkPaused(item);
-                        else MarkCancelled(item);
-                    }
-                    else if (proc.ExitCode == 0)
-                    {
-                        await StorageFileService.CleanupPartialFilesForItemAsync(item);
-                        item.ProgressPercent = 100.0;
-                        item.Speed = "—";
-                        item.Eta = "00:00";
-                        item.Status = QueueItemStatus.Completed;
-                        item.StatusText = "Completed";
-                        RefreshQueueUi();
-                        AppendLog(string.Format("[{0}] Completed: {1}", item.Id, item.Title));
-                    }
-                    else
-                    {
-                        item.Status = QueueItemStatus.Error;
-                        item.StatusText = "Failed (Exit " + proc.ExitCode + ")";
-                        RefreshQueueUi();
-                        AppendLog(string.Format("[{0}] Failed with exit code {1}", item.Id, proc.ExitCode));
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (item.CancellationSource.IsCancellationRequested)
-                {
-                    if (item.IsPauseRequested) MarkPaused(item);
-                    else MarkCancelled(item);
-                }
-                else
-                {
-                    item.Status = QueueItemStatus.Error;
-                    item.StatusText = "Error";
-                    RefreshQueueUi();
-                    AppendLog(string.Format("[{0}] Error: {1}", item.Id, ex.Message));
-                }
-            }
-            finally
-            {
-                item.ActiveProcess = null;
-                lock (queueLock)
-                {
-                    activeDownloads = Math.Max(0, activeDownloads - 1);
-                }
-                BeginInvoke((Action)(() =>
-                {
-                    UpdateQueueHeaderStats();
-                    ProcessQueue();
-                }));
-            }
-        }
-
-        private void MarkPaused(DownloadQueueItem item)
-        {
-            item.Status = QueueItemStatus.Paused;
-            item.StatusText = "Paused";
-            item.Speed = "—";
-            item.Eta = "—";
-            RefreshQueueUi();
-            AppendLog(string.Format("[{0}] Paused at {1:0.0}%: {2}", item.Id, item.ProgressPercent, item.Title));
-        }
-
-        private void MarkCancelled(DownloadQueueItem item)
-        {
-            item.Status = QueueItemStatus.Cancelled;
-            item.StatusText = "Cancelled";
-            item.Speed = "—";
-            item.Eta = "—";
-            RefreshQueueUi();
-            AppendLog(string.Format("[{0}] Cancelled: {1}", item.Id, item.Title));
-            Task.Run(async () =>
-            {
-                int deleted = await StorageFileService.CleanupPartialFilesForItemAsync(item);
-                if (deleted > 0)
-                {
-                    AppendLog(string.Format("[{0}] Cleaned up {1} temporary fragment file(s).", item.Id, deleted));
-                }
-            });
-        }
-
         private void TogglePauseResumeItem(DownloadQueueItem item)
         {
-            if (item == null) return;
-
-            if (item.Status == QueueItemStatus.Downloading ||
-                item.Status == QueueItemStatus.FetchingInfo ||
-                item.Status == QueueItemStatus.Queued)
-            {
-                item.IsPauseRequested = true;
-                item.CancellationSource.Cancel();
-                if (item.Status == QueueItemStatus.Queued)
-                {
-                    MarkPaused(item);
-                }
-                else if (item.ActiveProcess != null && !item.ActiveProcess.HasExited)
-                {
-                    ExternalToolService.KillProcessTree(item.ActiveProcess.Id);
-                }
-            }
-            else if (item.Status == QueueItemStatus.Paused)
-            {
-                item.IsPauseRequested = false;
-                item.CancellationSource = new CancellationTokenSource();
-                item.Status = QueueItemStatus.Queued;
-                item.StatusText = "Resuming...";
-                RefreshQueueUi();
-                AppendLog(string.Format("[{0}] Resumed: {1}", item.Id, item.Title));
-                ProcessQueue();
-            }
+            downloadManager.TogglePauseResume(item);
         }
 
         private void CancelSingleItem(DownloadQueueItem item)
         {
-            if (item == null) return;
-            if (item.Status == QueueItemStatus.Queued ||
-                item.Status == QueueItemStatus.FetchingInfo ||
-                item.Status == QueueItemStatus.Downloading ||
-                item.Status == QueueItemStatus.Merging ||
-                item.Status == QueueItemStatus.Paused)
-            {
-                item.IsPauseRequested = false;
-                item.CancellationSource.Cancel();
-                if (item.Status == QueueItemStatus.Queued || item.Status == QueueItemStatus.Paused)
-                {
-                    MarkCancelled(item);
-                }
-                else if (item.ActiveProcess != null && !item.ActiveProcess.HasExited)
-                {
-                    ExternalToolService.KillProcessTree(item.ActiveProcess.Id);
-                }
-            }
+            downloadManager.Cancel(item);
         }
 
         private void OpenCompletedItemFolder(DownloadQueueItem item)
@@ -638,14 +407,8 @@ namespace MediaDownloader
             List<DownloadQueueItem> current = queueListView.GetItems();
             foreach (DownloadQueueItem item in current)
             {
-                if (item.Status == QueueItemStatus.Completed ||
-                    item.Status == QueueItemStatus.Cancelled ||
-                    item.Status == QueueItemStatus.Error)
+                if (downloadManager.RemoveFinished(item))
                 {
-                    lock (queueLock)
-                    {
-                        queue.Remove(item);
-                    }
                     queueListView.RemoveItem(item);
                 }
             }
@@ -678,25 +441,17 @@ namespace MediaDownloader
             txtLog.ScrollToCaret();
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        protected override async void OnFormClosing(FormClosingEventArgs e)
         {
-            settings.Save();
-            lock (queueLock)
-            {
-                foreach (var item in queue)
-                {
-                    try
-                    {
-                        item.CancellationSource.Cancel();
-                        if (item.ActiveProcess != null && !item.ActiveProcess.HasExited)
-                        {
-                            ExternalToolService.KillProcessTree(item.ActiveProcess.Id);
-                        }
-                    }
-                    catch { }
-                }
-            }
             base.OnFormClosing(e);
+            if (e.Cancel || shutdownComplete) return;
+            e.Cancel = true;
+            if (!Enabled) return;
+            Enabled = false;
+            settings.Save();
+            await downloadManager.ShutdownAsync();
+            shutdownComplete = true;
+            Close();
         }
     }
 }
