@@ -31,6 +31,7 @@ namespace MediaDownloader
         private bool scheduling;
 
         public event Action Changed;
+        public event Action ProgressChanged;
         public event Action<string> Log;
 
         public DownloadManager(IDownloadProcessRunner processRunner,
@@ -127,9 +128,8 @@ namespace MediaDownloader
             }
             else if (item.Status == QueueItemStatus.Queued || item.Status == QueueItemStatus.Paused)
             {
-                MarkCancelled(item);
                 cleanups.RemoveAll(task => task.IsCompleted);
-                cleanups.Add(CleanupCancelledAsync(item));
+                cleanups.Add(FinishIdleCancellationAsync(item));
             }
             NotifyChanged();
         }
@@ -140,6 +140,40 @@ namespace MediaDownloader
             if (running.ContainsKey(item)) return false;
             if (item.Status != QueueItemStatus.Completed && item.Status != QueueItemStatus.Cancelled && item.Status != QueueItemStatus.Error) return false;
             return items.Remove(item);
+        }
+
+        public void Retry(DownloadQueueItem item)
+        {
+            VerifyThread();
+            if (stopping || item == null || !items.Contains(item) || running.ContainsKey(item) ||
+                (item.Status != QueueItemStatus.Error && item.Status != QueueItemStatus.Cancelled)) return;
+            if (item.Status == QueueItemStatus.Cancelled)
+            {
+                item.ProgressPercent = 0;
+                item.OutputFilePath = null;
+                item.TrackedFilePaths.Clear();
+            }
+            item.Failure = null; item.ErrorOutput = "";
+            item.Status = QueueItemStatus.Queued; item.StatusText = "Retrying...";
+            item.Speed = "—"; item.Eta = "—";
+            Schedule();
+        }
+
+        private async Task FinishIdleCancellationAsync(DownloadQueueItem item)
+        {
+            // Do not offer Retry until cleanup has finished using the temporary folder.
+            item.Status = QueueItemStatus.Merging;
+            item.StatusText = "Cancelling...";
+            await CleanupCancelledAsync(item);
+            MarkCancelled(item);
+            NotifyChanged();
+        }
+
+        private void Fail(DownloadQueueItem item, string details)
+        {
+            item.Failure = DownloadFailure.Create(item.Status == QueueItemStatus.Merging ? "Merging" : item.Status == QueueItemStatus.FetchingInfo ? "Fetching video information" : "Downloading", item.ErrorOutput + "\n" + details);
+            item.Status = QueueItemStatus.Error;
+            item.StatusText = "Download failed";
         }
 
         public async Task ShutdownAsync()
@@ -178,8 +212,7 @@ namespace MediaDownloader
                 }
                 else if (failure != null)
                 {
-                    item.Status = QueueItemStatus.Error;
-                    item.StatusText = "Error";
+                    Fail(item, failure.ToString());
                     WriteLog(string.Format("[{0}] Error: {1}", item.Id, failure.Message));
                 }
             }
@@ -233,8 +266,7 @@ namespace MediaDownloader
             }
             else
             {
-                item.Status = QueueItemStatus.Error;
-                item.StatusText = "Failed (Exit " + exitCode + ")";
+                Fail(item, "Engine exit code: " + exitCode);
                 WriteLog(string.Format("[{0}] Failed with exit code {1}", item.Id, exitCode));
             }
         }
@@ -270,8 +302,21 @@ namespace MediaDownloader
                 Execution current;
                 // Ignore delayed output from an interrupted or already finished run.
                 if (stopping || !running.TryGetValue(item, out current) || current != execution || execution.Cancellation.IsCancellationRequested) return;
-                if (isError) WriteLog(string.Format("[{0} ERR] {1}", item.Id, line));
-                else YtDlpOutputParser.ParseLine(item, line, NotifyChanged, WriteLog);
+                if (isError && !line.StartsWith("STASH_PROGRESS:", StringComparison.Ordinal))
+                {
+                    item.ErrorOutput += line + "\n";
+                    if (item.ErrorOutput.Length > 16000) item.ErrorOutput = item.ErrorOutput.Substring(item.ErrorOutput.Length - 16000);
+                    WriteLog(string.Format("[{0} ERR] {1}", item.Id, line));
+                }
+                else
+                {
+                    QueueItemStatus previousStatus = item.Status;
+                    string previousTitle = item.Title;
+                    bool updated = false;
+                    YtDlpOutputParser.ParseLine(item, line, () => updated = true, WriteLog);
+                    if (item.Status != previousStatus || item.Title != previousTitle) NotifyChanged();
+                    else if (updated && ProgressChanged != null) ProgressChanged();
+                }
             }, null);
         }
 

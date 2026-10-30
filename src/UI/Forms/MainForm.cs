@@ -27,17 +27,21 @@ namespace MediaDownloader
         private ModernButton btnCancelSelected;
         private ModernButton btnRemoveFinished;
         private ModernButton btnInstallTools;
-        private ModernButton btnToggleLog;
+        private readonly RecentLogWriter logWriter = new RecentLogWriter(Path.Combine(AppPaths.Current.DataDirectory, "logs"));
         private Label lblToolsStatus;
         private Label lblQueueStats;
         private Label lblActiveDownloads;
         private QueueListControl queueListView;
-        private RichTextBox txtLog;
-        private Panel pnlBottomLog;
+
+
         private ToolTip appToolTip;
 
         private DownloadManager downloadManager;
         private bool shutdownComplete;
+        private readonly Timer progressRefreshTimer = new Timer { Interval = 200 };
+        private bool progressRefreshPending;
+        private readonly Timer noticeTimer = new Timer { Interval = 5000 };
+        private Label notice;
 
         private string binFolder;
         private string ytDlpPath;
@@ -112,7 +116,20 @@ namespace MediaDownloader
             InitializeUi();
             downloadManager = new DownloadManager(new DownloadProcessRunner(), CheckAndPromptForDuplicateRename);
             downloadManager.Changed += RefreshQueueUi;
+            downloadManager.ProgressChanged += () =>
+            {
+                progressRefreshPending = true;
+                progressRefreshTimer.Start();
+            };
+            progressRefreshTimer.Tick += (sender, args) =>
+            {
+                progressRefreshTimer.Stop();
+                if (!progressRefreshPending) return;
+                progressRefreshPending = false;
+                queueListView.RefreshChangedItems();
+            };
             downloadManager.Log += AppendLog;
+            noticeTimer.Tick += (sender, args) => { noticeTimer.Stop(); notice.Visible = false; };
             FitInitialWindowToScreen();
             ApplyDarkTitleBar();
             CheckToolsStatus();
@@ -396,24 +413,6 @@ namespace MediaDownloader
             };
             btnRemoveFinished.Click += BtnRemoveFinished_Click;
 
-            btnToggleLog = new ModernButton
-            {
-                Text = "Console",
-                Size = new Size(Dpi.Px(98), Dpi.Px(27)),
-                Margin = new Padding(0),
-                BaseColor = Theme.BgSurface,
-                HoverColor = Theme.BgSurfaceHover,
-                BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary,
-                Font = new Font("Segoe UI", 8.5F),
-                CornerRadius = Dpi.Px(6)
-            };
-            btnToggleLog.Click += (s, e) =>
-            {
-                pnlBottomLog.Visible = !pnlBottomLog.Visible;
-                btnToggleLog.Text = pnlBottomLog.Visible ? "Hide Console" : "Console";
-            };
-
             pnlQueueBar.Controls.Add(lblQueueStats, 0, 0);
             pnlQueueBar.Controls.Add(btnCancelSelected, 1, 0);
             pnlQueueBar.Controls.Add(btnRemoveFinished, 2, 0);
@@ -436,45 +435,12 @@ namespace MediaDownloader
                 Margin = new Padding(0)
             };
             btnInstallTools.Anchor = AnchorStyles.Right;
-            btnToggleLog.Anchor = AnchorStyles.Right;
             btnInstallTools.BaseColor = Theme.BgTopBar;
-            btnToggleLog.BaseColor = Theme.BgTopBar;
-            btnToggleLog.BorderColor = Color.Empty;
             statusBar.Controls.Add(lblToolsStatus, 0, 0);
             statusBar.Controls.Add(lblActiveDownloads, 1, 0);
             statusBar.Controls.Add(btnInstallTools, 3, 0);
-            statusBar.Controls.Add(btnToggleLog, 4, 0);
-
-            // 3. Collapsible Bottom Console Log Card
-            pnlBottomLog = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = Dpi.Px(125),
-                Visible = false,
-                Padding = new Padding(Dpi.Px(18), Dpi.Px(6), Dpi.Px(18), Dpi.Px(14)),
-                BackColor = Theme.BgWindow
-            };
-
-            CardPanel cardLog = new CardPanel
-            {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(Dpi.Px(10), Dpi.Px(8), Dpi.Px(10), Dpi.Px(8)),
-                CardFillColor = Color.FromArgb(14, 15, 19),
-                CardBorderColor = Theme.BorderSubtle,
-                CornerRadius = Dpi.Px(8)
-            };
-
-            txtLog = new RichTextBox
-            {
-                Dock = DockStyle.Fill,
-                ReadOnly = true,
-                BackColor = Color.FromArgb(14, 15, 19),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                BorderStyle = BorderStyle.None,
-                Font = new Font("Consolas", 8.8F)
-            };
-            cardLog.Controls.Add(new DarkConsoleScrollHost(txtLog));
-            pnlBottomLog.Controls.Add(cardLog);
+            notice = new Label { AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = Theme.TextSecondary, Visible = false, Margin = new Padding(Dpi.Px(12), 0, 0, 0) };
+            statusBar.Controls.Add(notice, 2, 0);
 
             // 4. Center Custom Card Queue List
             Panel pnlCenter = new Panel
@@ -490,11 +456,21 @@ namespace MediaDownloader
             };
             queueListView.PauseResumeRequested += TogglePauseResumeItem;
             queueListView.CancelRequested += CancelSingleItem;
+            queueListView.DetailsRequested += item =>
+            {
+                using (DownloadDetailsDialog dialog = new DownloadDetailsDialog(item.Failure ?? DownloadFailure.Create("Downloading", "No engine error was provided."))) dialog.ShowDialog(this);
+            };
+            queueListView.RetryRequested += item => downloadManager.Retry(item);
+            queueListView.RemoveRequested += item =>
+            {
+                if (downloadManager.RemoveFinished(item)) queueListView.RemoveItem(item);
+                UpdateQueueHeaderStats();
+            };
             queueListView.OpenFileFolderRequested += OpenCompletedItemFolder;
             pnlCenter.Controls.Add(queueListView);
 
             Controls.Add(pnlCenter);
-            Controls.Add(pnlBottomLog);
+
             Controls.Add(statusBar);
             Controls.Add(pnlQueueBar);
             Controls.Add(pnlTopBar);

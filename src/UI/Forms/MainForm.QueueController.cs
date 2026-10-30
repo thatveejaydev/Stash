@@ -423,22 +423,27 @@ namespace MediaDownloader
                 BeginInvoke((Action)RefreshQueueUi);
                 return;
             }
-            queueListView.Invalidate();
+            queueListView.RefreshChangedItems();
             UpdateQueueHeaderStats();
         }
 
         private void AppendLog(string message)
         {
-            if (IsDisposed) return;
-            if (InvokeRequired)
+            logWriter.Write(message);
+            string notification = null;
+            if (message.StartsWith("[Queue]")) notification = "Link added to the queue.";
+            if (message.StartsWith("[Batch]")) notification = "Links added to the queue.";
+            if (message.StartsWith("FFmpeg ready")) notification = "Download engines installed.";
+            if (notification != null && !IsDisposed && IsHandleCreated)
             {
-                BeginInvoke((Action)(() => AppendLog(message)));
-                return;
+                string text = notification;
+                BeginInvoke((Action)(() =>
+                {
+                    if (IsDisposed || notice == null) return;
+                    notice.Text = text; notice.Visible = true;
+                    noticeTimer.Stop(); noticeTimer.Start();
+                }));
             }
-
-            string line = string.Format("[{0:HH:mm:ss}] {1}{2}", DateTime.Now, message, Environment.NewLine);
-            txtLog.AppendText(line);
-            txtLog.ScrollToCaret();
         }
 
         protected override async void OnFormClosing(FormClosingEventArgs e)
@@ -448,10 +453,19 @@ namespace MediaDownloader
             e.Cancel = true;
             if (!Enabled) return;
             Enabled = false;
+            progressRefreshTimer.Stop();
             settings.Save();
             await downloadManager.ShutdownAsync();
             shutdownComplete = true;
             Close();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            progressRefreshTimer.Dispose();
+            logWriter.Dispose();
+            noticeTimer.Dispose();
+            base.OnFormClosed(e);
         }
     }
 }

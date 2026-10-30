@@ -85,6 +85,7 @@ namespace MediaDownloader
             StringBuilder args = new StringBuilder();
             args.AppendFormat("--paths \"home:{0}\" --paths \"temp:{1}\" --print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ", Path.GetFullPath(item.OutputFolder), item.TemporaryFolder);
             args.Append("--newline --no-colors --progress --no-playlist --continue --windows-filenames --trim-filenames 120 ");
+            args.Append("--progress-template \"download:STASH_PROGRESS:%(info.vcodec)s|%(info.acodec)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s\" ");
 
             // Multi-Connection Turbo Downloading: concurrent DASH/HLS fragments + chunked HTTP Range requests to bypass single-stream server throttling
             if (item.ConcurrentFragments > 1)

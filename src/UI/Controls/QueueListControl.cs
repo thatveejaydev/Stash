@@ -11,6 +11,29 @@ namespace MediaDownloader
     public partial class QueueListControl : Control
     {
         private readonly List<DownloadQueueItem> items = new List<DownloadQueueItem>();
+        private sealed class CardSnapshot
+        {
+            public string Title, Badge, StatusText, Speed, Eta;
+            public QueueItemStatus Status;
+            public DownloadMode Mode;
+            public double Progress;
+            public int Height;
+
+            public CardSnapshot(DownloadQueueItem item, int height)
+            {
+                Title = item.Title; Badge = item.BadgeLabel; StatusText = item.StatusText;
+                Speed = item.Speed; Eta = item.Eta; Status = item.Status;
+                Mode = item.Mode; Progress = item.ProgressPercent; Height = height;
+            }
+
+            public bool Matches(DownloadQueueItem item)
+            {
+                return Title == item.Title && Badge == item.BadgeLabel && StatusText == item.StatusText
+                    && Speed == item.Speed && Eta == item.Eta && Status == item.Status
+                    && Mode == item.Mode && Progress == item.ProgressPercent;
+            }
+        }
+        private readonly Dictionary<DownloadQueueItem, CardSnapshot> snapshots = new Dictionary<DownloadQueueItem, CardSnapshot>();
         public DownloadQueueItem SelectedItem { get; private set; }
         private DownloadQueueItem hoveredItem = null;
         private DarkScrollBar scrollBar;
@@ -20,6 +43,9 @@ namespace MediaDownloader
         public event EventHandler SelectionChanged;
         public event Action<DownloadQueueItem> PauseResumeRequested;
         public event Action<DownloadQueueItem> CancelRequested;
+        public event Action<DownloadQueueItem> DetailsRequested;
+        public event Action<DownloadQueueItem> RetryRequested;
+        public event Action<DownloadQueueItem> RemoveRequested;
         public event Action<DownloadQueueItem> OpenFileFolderRequested;
 
         public QueueListControl()
@@ -63,6 +89,7 @@ namespace MediaDownloader
         public void RemoveItem(DownloadQueueItem item)
         {
             items.Remove(item);
+            snapshots.Remove(item);
             if (SelectedItem == item)
             {
                 SelectedItem = items.Count > 0 ? items[0] : null;
@@ -75,6 +102,33 @@ namespace MediaDownloader
         public List<DownloadQueueItem> GetItems()
         {
             return new List<DownloadQueueItem>(items);
+        }
+
+        public void RefreshChangedItems()
+        {
+            int y = -scrollBar.Value + Dpi.Px(4);
+            bool layoutChanged = false;
+            foreach (DownloadQueueItem item in items)
+            {
+                int height = GetRowHeight(item);
+                CardSnapshot previous;
+                bool known = snapshots.TryGetValue(item, out previous);
+                if (known && previous.Height != height) layoutChanged = true;
+                if (!known || !previous.Matches(item))
+                {
+                    snapshots[item] = new CardSnapshot(item, height);
+                    Rectangle bounds = Rectangle.Intersect(ClientRectangle,
+                        new Rectangle(0, y, ClientSize.Width, height));
+                    if (!bounds.IsEmpty) Invalidate(bounds);
+                }
+                y += height + RowGap;
+            }
+            if (layoutChanged)
+            {
+                // Completed cards shrink, shifting all subsequent rows and the scrollbar.
+                UpdateScrollBar();
+                Invalidate();
+            }
         }
 
         private void UpdateScrollBar()
@@ -144,6 +198,25 @@ namespace MediaDownloader
             {
                 SelectedItem = hit;
                 if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty);
+
+                if (hit.Status == QueueItemStatus.Error)
+                {
+                    for (int action = 0; action < 3; action++)
+                    {
+                        if (!GetErrorActionRect(rowRect, action).Contains(e.Location)) continue;
+                        if (action == 0 && DetailsRequested != null) DetailsRequested(hit);
+                        if (action == 1 && RetryRequested != null) RetryRequested(hit);
+                        if (action == 2 && RemoveRequested != null) RemoveRequested(hit);
+                        return;
+                    }
+                }
+
+                if (hit.Status == QueueItemStatus.Cancelled)
+                {
+                    if (GetErrorActionRect(rowRect, 1).Contains(e.Location) && RetryRequested != null) RetryRequested(hit);
+                    else if (GetErrorActionRect(rowRect, 2).Contains(e.Location) && RemoveRequested != null) RemoveRequested(hit);
+                    return;
+                }
 
                 Rectangle pauseRect = GetPauseResumeButtonRect(rowRect);
                 if (CanPauseOrResume(hit.Status) && pauseRect.Contains(e.Location))
@@ -233,7 +306,6 @@ namespace MediaDownloader
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            UpdateScrollBar();
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
@@ -257,7 +329,8 @@ namespace MediaDownloader
             {
                 Rectangle rowRect = new Rectangle(Dpi.Px(2), yOffset, width, GetRowHeight(items[i]));
                 yOffset += rowRect.Height + RowGap;
-                if (rowRect.Bottom < 0 || rowRect.Top > ClientSize.Height) continue;
+                if (rowRect.Top > e.ClipRectangle.Bottom) break;
+                if (!rowRect.IntersectsWith(e.ClipRectangle)) continue;
                 DrawQueueCard(g, items[i], rowRect);
             }
         }

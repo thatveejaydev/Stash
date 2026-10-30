@@ -7,6 +7,10 @@ namespace MediaDownloader
 {
     public partial class QueueListControl
     {
+        private Rectangle GetErrorActionRect(Rectangle row, int action)
+        {
+            return new Rectangle(row.Right - Dpi.Px(260) + action * Dpi.Px(84), row.Bottom - Dpi.Px(34), Dpi.Px(78), Dpi.Px(26));
+        }
         private Rectangle GetFolderButtonRect(Rectangle rect)
         {
             return new Rectangle(rect.Right - (rect.Height == Dpi.Px(64) ? Dpi.Px(38) : Dpi.Px(70)), rect.Height == Dpi.Px(64) ? rect.Y + Dpi.Px(19) : rect.Bottom - Dpi.Px(38), Dpi.Px(26), Dpi.Px(26));
@@ -64,6 +68,19 @@ namespace MediaDownloader
                 }
                 TextRenderer.DrawText(g, item.StatusText, detail, new Rectangle(rect.Right - Dpi.Px(150), rect.Y + Dpi.Px(12), Dpi.Px(136), Dpi.Px(20)), statusColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
 
+                if (item.Status == QueueItemStatus.Error)
+                {
+                    TextRenderer.DrawText(g, item.Failure == null ? "Something unexpected went wrong." : item.Failure.Message,
+                        detail, new Rectangle(rect.X + Dpi.Px(12), rect.Y + Dpi.Px(60), rect.Width - Dpi.Px(24), Dpi.Px(20)), Theme.AccentDanger, flags);
+                    string[] labels = { "Details", "Retry", "Remove" };
+                    for (int action = 0; action < labels.Length; action++)
+                    {
+                        Rectangle button = GetErrorActionRect(rect, action);
+                        using (SolidBrush brush = new SolidBrush(action == 1 ? Theme.BrandPurple : Theme.BgSurfaceHover)) g.FillRectangle(brush, button);
+                        TextRenderer.DrawText(g, labels[action], detail, button, Theme.TextPrimary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                    }
+                    return;
+                }
                 Rectangle track = new Rectangle(rect.X + Dpi.Px(12), rect.Y + Dpi.Px(63), rect.Width - Dpi.Px(24), Dpi.Px(4));
                 using (GraphicsPath path = Theme.CreateRoundedRectangle(track, 3))
                 using (SolidBrush brush = new SolidBrush(Theme.BorderSubtle)) g.FillPath(brush, path);
@@ -77,7 +94,17 @@ namespace MediaDownloader
                 }
                 string telemetry = string.Format("{0:0}%", percent);
                 if (item.Status == QueueItemStatus.Downloading) telemetry += "   ·   " + item.Speed + "   ·   " + item.Eta + " remaining";
-                TextRenderer.DrawText(g, telemetry, detail, new Rectangle(track.X, rect.Y + Dpi.Px(78), Math.Max(Dpi.Px(1), track.Width - Dpi.Px(110)), Dpi.Px(20)), Theme.TextSecondary, flags);
+                TextRenderer.DrawText(g, telemetry, detail, new Rectangle(track.X, rect.Y + Dpi.Px(78), Math.Max(Dpi.Px(1), track.Width - Dpi.Px(item.Status == QueueItemStatus.Cancelled ? 190 : 110)), Dpi.Px(20)), Theme.TextSecondary, flags);
+                if (item.Status == QueueItemStatus.Cancelled)
+                {
+                    for (int action = 1; action <= 2; action++)
+                    {
+                        Rectangle button = GetErrorActionRect(rect, action);
+                        using (SolidBrush brush = new SolidBrush(action == 1 ? Theme.BrandPurple : Theme.BgSurfaceHover)) g.FillRectangle(brush, button);
+                        TextRenderer.DrawText(g, action == 1 ? "Retry" : "Remove", detail, button, Theme.TextPrimary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                    }
+                    return;
+                }
             }
 
             using (Pen icon = new Pen(Theme.TextSecondary, 1.5f))

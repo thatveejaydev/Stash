@@ -85,15 +85,20 @@ internal static class DownloadManagerTests
     {
         FakeRunner runner = new FakeRunner();
         DownloadManager manager = Manager(runner);
+        int stateNotifications = 0, progressNotifications = 0;
+        manager.Changed += () => stateNotifications++;
+        manager.ProgressChanged += () => progressNotifications++;
         DownloadQueueItem first = Item(), second = Item(), third = Item();
         manager.AddItems(new[] { first, second, third });
         manager.ProcessQueue("fake", null, 2);
         Assert(runner.Calls.Count == 2 && third.Status == QueueItemStatus.Queued, "Parallel limit must hold");
         manager.TogglePauseResume(third);
         Assert(third.Status == QueueItemStatus.Paused, "Queued item can pause without starting a process");
+        int beforeProgress = stateNotifications;
         runner.Calls[0].Output("[download] 25.0% of 10MiB at 1MiB/s ETA 00:10");
         await Until(() => first.ProgressPercent == 25);
         Assert(first.Speed == "8.4 Mbps", "Output should be parsed on the owner thread");
+        Assert(stateNotifications == beforeProgress && progressNotifications == 1, "Progress must use the throttled notification path");
         runner.Calls[0].Result.SetResult(0);
         await Until(() => first.Status == QueueItemStatus.Completed);
         Assert(runner.Calls.Count == 2, "Paused queued item must not start after another finishes");
@@ -148,6 +153,11 @@ internal static class DownloadManagerTests
         await Until(() => item.Status == QueueItemStatus.Cancelled);
         manager.TogglePauseResume(item);
         Assert(runner.Calls.Count == 1, "Cancelled item must not resume");
+        item.ProgressPercent = 34;
+        manager.Retry(item);
+        Assert(runner.Calls.Count == 2 && item.ProgressPercent == 0, "Retrying a cancelled download must start a fresh execution");
+        runner.Calls[1].Result.SetResult(0);
+        await Until(() => item.Status == QueueItemStatus.Completed);
         await manager.ShutdownAsync();
     }
 
@@ -242,6 +252,19 @@ internal static class DownloadManagerTests
 
     private static async Task RunAll()
     {
+        FakeRunner retryRunner = new FakeRunner();
+        DownloadManager retryManager = Manager(retryRunner);
+        DownloadQueueItem retryItem = Item();
+        retryManager.AddItems(new[] { retryItem });
+        retryManager.ProcessQueue("fake", null, 1);
+        retryRunner.Calls[0].Result.SetResult(1);
+        await Until(() => retryItem.Status == QueueItemStatus.Error);
+        Assert(retryItem.Failure != null && retryItem.Failure.TechnicalDetails.Contains("exit code: 1"), "Unknown failures must preserve exit details");
+        retryManager.Retry(retryItem);
+        Assert(retryRunner.Calls.Count == 2 && retryItem.Failure == null, "Retry must clear old failure and launch a new execution");
+        retryRunner.Calls[1].Result.SetResult(0);
+        await Until(() => retryItem.Status == QueueItemStatus.Completed);
+        await retryManager.ShutdownAsync();
         Console.WriteLine("Queue and parallelism");
         await QueueAndParallelism();
         Console.WriteLine("Pause/resume and stale output");
@@ -267,7 +290,19 @@ internal static class DownloadManagerTests
         }
         testFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(testFolder);
+        DownloadQueueItem progressItem = Item();
+        YtDlpOutputParser.ParseLine(progressItem, "STASH_PROGRESS:avc1|none|100.0%|1.00MiB/s|00:00", null, null);
+        Assert(progressItem.StatusText == "Downloading video" && progressItem.ProgressPercent == 100, "Video stage");
+        YtDlpOutputParser.ParseLine(progressItem, "STASH_PROGRESS:none|mp4a|12.0%|1.00MiB/s|00:01", null, null);
+        Assert(progressItem.StatusText == "Downloading audio" && progressItem.ProgressPercent == 12, "Audio stage after video");
+        YtDlpOutputParser.ParseLine(progressItem, "[Merger] Merging formats into \"test.mp4\"", null, null);
+        Assert(progressItem.StatusText == "Combining files..." && progressItem.ProgressPercent == 100, "Combining stage");
+        YtDlpOutputParser.ParseLine(progressItem, "STASH_PROGRESS:avc1|mp4a|25%|NA|NA", null, null);
+        Assert(progressItem.StatusText == "Downloading video + audio", "Combined stream stage");
+        YtDlpOutputParser.ParseLine(progressItem, "STASH_PROGRESS:NA|NA|Unknown%|NA|NA", null, null);
+        Assert(progressItem.StatusText == "Downloading" && progressItem.ProgressPercent == 25, "Unknown progress fallback");
         AppDataStorageTests.Run(Path.Combine(testFolder, "storage"));
+        ErrorFeatureTests.Run(Path.Combine(testFolder, "logs"));
         UiContext context = new UiContext();
         SynchronizationContext.SetSynchronizationContext(context);
         Task tests = RunAll();

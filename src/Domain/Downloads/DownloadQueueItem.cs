@@ -26,6 +26,8 @@ namespace MediaDownloader
         public string Eta { get; internal set; }
         public string OutputFilePath { get; internal set; }
         public bool MetadataResolved { get; set; }
+        public DownloadFailure Failure { get; internal set; }
+        internal string ErrorOutput = "";
         public List<string> TrackedFilePaths { get; set; }
 
         public DownloadQueueItem(

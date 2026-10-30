@@ -43,6 +43,23 @@ namespace MediaDownloader
 
         public static void ParseLine(DownloadQueueItem item, string line, Action onUiChanged, Action<string> onLogLine)
         {
+            if (line.StartsWith("STASH_PROGRESS:", StringComparison.Ordinal))
+            {
+                string[] fields = line.Substring("STASH_PROGRESS:".Length).Split('|');
+                if (fields.Length != 5) return;
+                bool video = HasCodec(fields[0]);
+                bool audio = HasCodec(fields[1]);
+                item.StatusText = video && audio ? "Downloading video + audio" : video ? "Downloading video" : audio ? "Downloading audio" : "Downloading";
+                double percent;
+                if (double.TryParse(fields[2].Trim().TrimEnd('%'), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out percent))
+                    item.ProgressPercent = Math.Max(0, Math.Min(100, percent));
+                item.Speed = FormatSpeedAsMbps(fields[3].Trim());
+                item.Eta = fields[4].Trim();
+                item.Status = QueueItemStatus.Downloading;
+                if (onUiChanged != null) onUiChanged();
+                return;
+            }
             if (line.StartsWith("STASH_FINAL:", StringComparison.Ordinal))
             {
                 item.OutputFilePath = line.Substring("STASH_FINAL:".Length).Trim();
@@ -73,8 +90,10 @@ namespace MediaDownloader
                 line.StartsWith("[ExtractAudio]", StringComparison.OrdinalIgnoreCase))
             {
                 item.Status = QueueItemStatus.Merging;
-                item.StatusText = "FFmpeg Muxing...";
-                item.ProgressPercent = 99.0;
+                item.StatusText = line.StartsWith("[Merger]", StringComparison.OrdinalIgnoreCase) ? "Combining files..." : "Converting audio...";
+                item.Speed = "—";
+                item.Eta = "—";
+                item.ProgressPercent = 100;
                 if (onUiChanged != null) onUiChanged();
                 if (onLogLine != null) onLogLine(string.Format("[{0}] {1}", item.Id, line));
                 return;
@@ -86,7 +105,7 @@ namespace MediaDownloader
             {
                 item.Status = QueueItemStatus.Merging;
                 item.StatusText = "Embedding Tags & Art...";
-                item.ProgressPercent = 99.6;
+                item.ProgressPercent = 100;
                 if (onUiChanged != null) onUiChanged();
                 if (onLogLine != null) onLogLine(string.Format("[{0}] {1}", item.Id, line));
                 return;
@@ -115,6 +134,12 @@ namespace MediaDownloader
                 item.StatusText = "Downloading";
                 if (onUiChanged != null) onUiChanged();
             }
+        }
+
+        private static bool HasCodec(string codec)
+        {
+            return !string.IsNullOrWhiteSpace(codec) && !codec.Equals("none", StringComparison.OrdinalIgnoreCase)
+                && !codec.Equals("NA", StringComparison.OrdinalIgnoreCase);
         }
     }
 }
