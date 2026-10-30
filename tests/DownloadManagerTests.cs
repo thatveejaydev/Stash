@@ -214,6 +214,7 @@ internal static class DownloadManagerTests
         first = Item(); second = Item();
         manager.AddItems(new[] { first, second });
         manager.ProcessQueue("missing.exe", null, 1);
+        await Until(() => first.Status == QueueItemStatus.Error && second.Status == QueueItemStatus.Error);
         Assert(first.Status == QueueItemStatus.Error && second.Status == QueueItemStatus.Error, "Startup failures must release queue slots");
         await manager.ShutdownAsync();
     }
@@ -252,6 +253,7 @@ internal static class DownloadManagerTests
 
     private static async Task RunAll()
     {
+        await FailureFolderCleanup();
         FakeRunner retryRunner = new FakeRunner();
         DownloadManager retryManager = Manager(retryRunner);
         DownloadQueueItem retryItem = Item();
@@ -277,6 +279,39 @@ internal static class DownloadManagerTests
         await ShutdownAndStartupFailure();
         Console.WriteLine("Real process ownership");
         await RealProcessOwnership();
+    }
+
+    private static async Task FailureFolderCleanup()
+    {
+        FakeRunner runner = new FakeRunner();
+        DownloadManager manager = Manager(runner);
+        DownloadQueueItem empty = Item();
+        manager.AddItems(new[] { empty });
+        manager.ProcessQueue("fake", null, 1);
+        Assert(Directory.Exists(empty.TemporaryFolder), "Temporary folder exists while engine is running");
+        runner.Calls[0].Result.SetResult(1);
+        await Until(() => empty.Status == QueueItemStatus.Error);
+        Assert(!Directory.Exists(empty.TemporaryFolder), "Failed source must leave no empty temporary folder");
+        manager.RemoveFinished(empty);
+
+        DownloadQueueItem partial = Item();
+        manager.AddItems(new[] { partial });
+        manager.ProcessQueue("fake", null, 1);
+        string fragment = Path.Combine(partial.TemporaryFolder, "video.part");
+        string output = Path.Combine(testFolder, "keep-finished.mp4");
+        File.WriteAllText(fragment, "resume-me");
+        File.WriteAllText(output, "finished");
+        Assert(!manager.RemoveFinished(partial) && File.Exists(fragment), "Removal cannot clean a running download");
+        runner.Calls[1].Result.SetResult(1);
+        await Until(() => partial.Status == QueueItemStatus.Error);
+        Assert(File.ReadAllText(fragment) == "resume-me", "Failure preserves partial download");
+        manager.Retry(partial);
+        Assert(runner.Calls.Count == 3 && File.Exists(fragment), "Retry retains resumable partial data");
+        runner.Calls[2].Result.SetResult(1);
+        await Until(() => partial.Status == QueueItemStatus.Error);
+        Assert(manager.RemoveFinished(partial), "Failed card can be removed");
+        await manager.ShutdownAsync();
+        Assert(!Directory.Exists(partial.TemporaryFolder) && File.ReadAllText(output) == "finished", "Removal cleans temporary files and preserves finished output");
     }
 
     private static int Main(string[] args)

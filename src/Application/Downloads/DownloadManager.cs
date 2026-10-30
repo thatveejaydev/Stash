@@ -138,8 +138,14 @@ namespace MediaDownloader
         public bool RemoveFinished(DownloadQueueItem item)
         {
             VerifyThread();
+            if (stopping || item == null || !items.Contains(item)) return false;
             if (running.ContainsKey(item)) return false;
             if (item.Status != QueueItemStatus.Completed && item.Status != QueueItemStatus.Cancelled && item.Status != QueueItemStatus.Error) return false;
+            if (item.Status == QueueItemStatus.Error)
+            {
+                cleanups.RemoveAll(task => task.IsCompleted);
+                cleanups.Add(CleanupCancelledAsync(item));
+            }
             return items.Remove(item);
         }
 
@@ -214,8 +220,17 @@ namespace MediaDownloader
                 }
                 else if (failure != null)
                 {
-                    Fail(item, failure.ToString());
-                    WriteLog(string.Format("[{0}] Error: {1}", item.Id, failure.Message));
+                    await StorageFileService.CleanupEmptyTemporaryFolderAsync(item);
+                    if (token.IsCancellationRequested)
+                    {
+                        if (execution.PauseRequested) MarkPaused(item);
+                        else { await CleanupCancelledAsync(item); MarkCancelled(item); }
+                    }
+                    else
+                    {
+                        Fail(item, failure.ToString());
+                        WriteLog(string.Format("[{0}] Error: {1}", item.Id, failure.Message));
+                    }
                 }
             }
             finally
@@ -282,6 +297,8 @@ namespace MediaDownloader
             }
             else
             {
+                await StorageFileService.CleanupEmptyTemporaryFolderAsync(item);
+                token.ThrowIfCancellationRequested();
                 Fail(item, "Engine exit code: " + exitCode);
                 WriteLog(string.Format("[{0}] Failed with exit code {1}", item.Id, exitCode));
             }

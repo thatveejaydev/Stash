@@ -106,14 +106,36 @@ namespace MediaDownloader
             return baseTitle + " (Copy)";
         }
 
-        public static async Task<int> CleanupPartialFilesForItemAsync(DownloadQueueItem item)
+        private static string GetValidatedTemporaryFolder(DownloadQueueItem item)
         {
-            if (item == null) return 0;
             string folder = Path.GetFullPath(item.TemporaryFolder);
             string parent = Path.GetFullPath(item.OutputFolder).TrimEnd(Path.DirectorySeparatorChar);
             if (!string.Equals(Path.GetDirectoryName(folder), parent, StringComparison.OrdinalIgnoreCase) ||
                 !Path.GetFileName(folder).StartsWith(".stash-temp-", StringComparison.Ordinal))
                 throw new InvalidOperationException("Invalid temporary folder.");
+            return folder;
+        }
+
+        public static Task CleanupEmptyTemporaryFolderAsync(DownloadQueueItem item)
+        {
+            string folder = GetValidatedTemporaryFolder(item);
+            return Task.Run(() =>
+            {
+                try
+                {
+                    if (!Directory.Exists(folder) || (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) return;
+                    // Non-recursive deletion preserves all partial files and unknown contents.
+                    Directory.Delete(folder, false);
+                }
+                catch (IOException) { } // Non-empty folder, or a file is still locked.
+                catch (UnauthorizedAccessException) { }
+            });
+        }
+
+        public static async Task<int> CleanupPartialFilesForItemAsync(DownloadQueueItem item)
+        {
+            if (item == null) return 0;
+            string folder = GetValidatedTemporaryFolder(item);
             int deleted = 0;
             for (int attempt = 0; attempt < 4; attempt++)
             {
