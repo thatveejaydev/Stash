@@ -14,6 +14,7 @@ namespace MediaDownloader
         public string DataDirectory { get; private set; }
         public string SettingsPath { get; private set; }
         public string EnginesDirectory { get; private set; }
+        public string UpdatesDirectory { get; private set; }
 
         internal AppPaths(string executableDirectory, string localAppDataDirectory)
         {
@@ -23,11 +24,13 @@ namespace MediaDownloader
             DataDirectory = Path.Combine(localAppDataDirectory, "Stash");
             SettingsPath = Path.Combine(DataDirectory, "settings.cfg");
             EnginesDirectory = Path.Combine(DataDirectory, "bin");
+            UpdatesDirectory = Path.Combine(DataDirectory, "updates");
         }
 
         public void Initialize()
         {
             Directory.CreateDirectory(EnginesDirectory);
+            Directory.CreateDirectory(UpdatesDirectory);
             MigrateFile(Path.Combine(executableDirectory, "settings.cfg"), SettingsPath);
             foreach (string engine in new[] { "yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe" })
             {
