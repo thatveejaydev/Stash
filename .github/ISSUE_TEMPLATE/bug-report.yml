@@ -1,0 +1,86 @@
+name: Bug Report
+description: Report a problem with Stash
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please provide as much detail as possible.
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Existing issue
+      options:
+        - label: I searched for an existing issue and could not find one.
+          required: true
+
+  - type: input
+    id: stash-version
+    attributes:
+      label: Stash version
+      description: You can find this in the About Stash window.
+      placeholder: "Example: 0.2.3"
+    validations:
+      required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "Example: Windows 11 24H2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Clearly describe the problem you encountered.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the steps needed to reproduce the problem.
+      placeholder: |
+        1. Open Stash
+        2. Select...
+        3. Paste...
+        4. See the error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: download-type
+    attributes:
+      label: Download type
+      options:
+        - Video (MP4)
+        - Video (MKV)
+        - Audio (MP3)
+        - Audio (M4A)
+        - Audio (FLAC)
+        - Playlist
+        - Not related to a download
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-information
+    attributes:
+      label: Additional information
+      description: Add screenshots, error details, or other helpful information. Remove private information before posting.
+    validations:
+      required: false

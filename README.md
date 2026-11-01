@@ -2,9 +2,11 @@
 
 # Stash
 
-Stash is a **lightweight**, **local** Video & Audio Downloader for Windows
+A fast, lightweight **video and audio downloader** for **Windows**. Stash runs entirely on your PC, with **no accounts**, **no cloud**, and **no tracking**.
 
-<a href="https://choosealicense.com/licenses/mit/"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+<a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+<a href="https://github.com/thatveejaydev/Stash/releases/latest"><img src="https://img.shields.io/github/v/release/thatveejaydev/Stash" alt="Latest release"></a>
+<img src="https://img.shields.io/badge/platform-Windows-blue" alt="Windows">
 <img src="https://img.shields.io/badge/powered%20by-yt--dlp-red" alt="Powered by yt-dlp">
 <img src="https://img.shields.io/badge/powered%20by-FFmpeg-green" alt="Powered by FFmpeg">
 
@@ -16,70 +18,157 @@ Stash is a **lightweight**, **local** Video & Audio Downloader for Windows
 
 ## 🔋 Powered By
 
-Stash is built on top of two open-source tools:
+Stash is powered by two open-source tools:
 
-- [**yt-dlp**](https://github.com/yt-dlp/yt-dlp): handles media extraction and downloading from supported sites.
-- [**FFmpeg**](https://ffmpeg.org/): handles audio extraction, format conversion, and metadata/thumbnail embedding.
+- [**yt-dlp**](https://github.com/yt-dlp/yt-dlp) discovers and downloads **video**, **audio**, **playlists**, and other media from thousands of supported websites.
+- [**FFmpeg**](https://ffmpeg.org/) **merges** video and audio streams, **converts** formats, **extracts** audio, and **embeds** metadata, thumbnails, and subtitles.
 
-## ⚡ Effortless & Turbocharged Downloading
+## ✨ Features
 
-- **One-Click Paste & Auto-Download:** Click **Paste Link** or press `Ctrl+V` anywhere in the window to instantly queue any copied URL and start downloading immediately.
-- **Multi-Connection Turbo Acceleration:** Bypasses server bandwidth throttling by splitting streams into chunks and downloading multiple fragments simultaneously (presets from `1x` up to `16x` maximum speed; `8x` enabled by default).
-- **Parallel Downloading Queue:** Configure between `1` and `6` simultaneous downloads running in parallel with automatic background queue scheduling.
-- **Pause & Resume Anytime:** Pause active downloads with a single click (`❚❚`) to free up bandwidth; click Resume (`▶`) to pick up right from where you left off without re-fetching or starting over.
-- **Smart Cancel & Auto-Cleanup:** Cancelling a download (`✕`) immediately terminates active processes and cleans up all temporary `.part`, `.ytdl`, and fragment files, keeping your target folder completely clutter-free.
+### Download from thousands of websites
 
-## 🎬 Maximum Quality & Instant Merging
+- Download video and audio from [**websites**](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) supported by yt-dlp, including YouTube, Instagram, TikTok, Facebook, Vimeo, and SoundCloud.
+- Download individual videos, Shorts, playlists, albums, and other supported collections.
+- Paste one link or multiple links at once.
+- Click **Paste Link** or press `Ctrl+V` or `Shift+Insert` to add links and begin downloading.
 
-- **Smart Muxing Without Re-encoding:** Prioritizes native H.264 video and AAC audio streams for MP4 downloads, allowing FFmpeg to merge files in ~1–2 seconds with 0% CPU strain and zero generational quality loss.
-- **Adaptive Ultra-HD Support:** Automatically selects high-efficiency VP9/AV1 streams when downloading 2K (`1440p`) or 4K (`2160p`) media to guarantee maximum native resolution.
-- **Flexible Video Containers (MP4 / MKV):** Choose between universal MP4 compatibility or open-container MKV across resolutions from `360p` up to `4K / 8K UHD`.
-- **Lossless & Hi-Fi Audio Extraction:** Extract audio directly in `MP3 (320 kbps CBR)`, pristine native `M4A (AAC)`, or `FLAC (Lossless)`.
+### Choose your format and quality
 
-## 🏷️ Metadata, Organization & Windows Integration
+- Save videos as **MP4** or **MKV**.
+- Choose the best available quality or limit downloads to **4K, 1440p, 1080p, 720p, 480p, or 360p**.
+- Extract audio as **MP3, M4A, or FLAC**.
+- Automatically combines separate video and audio into one finished file.
 
-- **Embedded Tags & Cover Art:** Automatically embed chapters, metadata tags (artist, title, album), and high-resolution JPG cover art directly into media containers.
-- **Live Real-Time Telemetry:** Displays live download progress, ETA countdown, and connection bandwidth in real-time `Mbps` (megabits per second).
-- **Smart Duplicate File Protection:** Scans your destination directory before downloading and prompts you with safe incremental renaming if a similar file already exists.
-- **Built-in Engine Manager:** Automatic one-click download and update routine for `yt-dlp` and `FFmpeg` with self-healing local executable discovery.
+### Download playlists
 
----
+- Download an entire playlist.
+- Download only the individual video from a playlist link.
+- Select a custom range, such as videos 5–20.
 
-## 📋 Summary
+### Include extra media information
 
-| Category | Features & Capabilities |
-| :--- | :--- |
-| **Speed & Engine** | Multi-Connection Turbo (`1x`–`16x`), Parallel Queues (1–6 concurrent), Smart Muxing (<2s stream-copy merge) |
-| **Queue Controls** | Instant `Ctrl+V` paste, Pause (`❚❚`), Resume (`▶`), and Cancel (`✕`) with automatic fragment cleanup |
-| **Video Quality** | Best / 4K UHD / 2K QHD / 1080p / 720p / 480p / 360p in MP4 or MKV |
-| **Audio Quality** | MP3 (320 kbps), M4A (Original AAC), and FLAC (Lossless) |
-| **Tags & Art** | Metadata, video chapters, and embedded high-res thumbnail cover art |
-| **Workspace & UX** | Real-time `Mbps` speed meter, remembered folder history, duplicate file protection, and modern dark UI |
+- Embed creator subtitles and automatic captions when available.
+- Keep subtitles as optional tracks that can be turned on or off in a compatible player.
+- Add titles, artist information, chapters, and other available details.
+- Embed the video thumbnail as cover art.
 
-**In short:** Copy any link, press `Ctrl+V`, and let Stash handle the rest — fast, organized, and at the best quality available.
+### Manage download speed and activity
 
-## Settings and engines
+- Choose between **1, 4, 8, 12, or 16 download connections** for supported websites.
+- Run between **one and six downloads simultaneously**.
+- View progress, download speed, and estimated time remaining.
+- Pause, resume, cancel, retry, or remove individual downloads.
+- Clear completed downloads from the queue with one button.
 
-Stash stores preferences in `%LocalAppData%\Stash\settings.cfg` and its download engines in `%LocalAppData%\Stash\bin`. Windows resolves Local AppData for the signed-in user; no username or drive letter is embedded in the application.
+### Organize downloaded files
 
-On first launch, existing settings and engines beside the EXE are migrated automatically. Existing AppData files take priority. Successfully migrated originals are removed when writable; read-only originals and unrelated files are left alone.
+- Choose where files are saved.
+- Quickly reuse recently selected folders.
+- Open a completed file’s location in File Explorer.
+- Receive a warning when a similar file already exists.
+- Rename the new file instead of accidentally replacing an existing one.
 
-Moving the EXE, including onto a flash drive, keeps the same preferences and engines for that Windows account. Another computer or account uses its own storage and requires engine installation if none are present. The **Install yt-dlp + FFmpeg** button downloads engines into Local AppData.
+### Simple setup and updates
 
-## 🔨 How to Build the Windows EXE
+- Install the required download tools with one click.
+- Check for Stash updates from the **About Stash** window.
+- View release notes or install an available update and restart the application.
+- Remember your preferred format, quality, folder, subtitles, and other options.
 
-Run `build.bat` from Command Prompt or PowerShell:
+### Private and local
+
+- Runs entirely on your Windows computer.
+- Requires no Stash account.
+- Uses no cloud processing or tracking.
+
+## 📥 Installation
+
+1. Download the latest `Stash.exe` from the [Releases page](https://github.com/thatveejaydev/Stash/releases/latest).
+2. Open `Stash.exe`.
+3. Select **Install yt-dlp + FFmpeg** when prompted.
+4. Copy a supported media link and select **Paste Link**.
+
+Stash requires 64-bit Windows and an internet connection. No traditional installation is required.
+
+## ⚙️ Settings and download tools
+
+Stash stores your preferences and download tools in your Windows user folder. They remain available if you move `Stash.exe` elsewhere on the same computer.
+
+When upgrading from an older version, Stash automatically moves compatible settings and tools to the new location. Each Windows account and computer keeps its own copy.
+
+If the required tools are missing, select **Install yt-dlp + FFmpeg** to download them.
+
+## 🖥️ Development
+
+### Requirements
+
+To build Stash from source, you need:
+
+- Windows
+- .NET Framework 4.x with the 64-bit C# compiler
+- Git, if you want to clone the repository
+
+No external packages are required to compile Stash. yt-dlp and FFmpeg are only needed when running the application and can be installed directly through Stash.
+
+### Get the source code
+
+```powershell
+git clone https://github.com/thatveejaydev/Stash.git
+cd Stash
+```
+
+### Build the application
+
+Run the build script from Command Prompt or PowerShell:
 
 ```powershell
 .\build.bat
 ```
 
-This produces `dist\Stash.exe` and `Stash.exe`.
+The script compiles the source files and creates:
 
-Release builds also produce `Stash.exe.sha256`. To enable in-app updates, create a stable GitHub Release with a `vMAJOR.MINOR.PATCH` tag and attach both `Stash.exe` and `Stash.exe.sha256`. Keep `AssemblyInformationalVersion` in `src\Properties\AssemblyInfo.cs` synchronized with the release tag.
+- `Stash.exe`
+- `Stash.exe.sha256`
+- Copies of both files inside `dist`, when that folder exists
 
-Use the **ⓘ** button to open app information, then select **Check for Updates** to check manually. Stash does not check on startup or when opening this dialog. **View Release** opens the release notes on GitHub; **Update and Restart** appears when a newer version is available.
+Stash is compiled directly with the C# compiler included with .NET Framework. A Visual Studio solution is not required.
+
+### Run the tests
+
+```powershell
+.\tests\run-tests.bat
+```
+
+The test program is created under `bin\tests` and runs automatically.
+
+### Source structure
+
+| Location | Purpose |
+|---|---|
+| `src\Application` | Application settings and download management |
+| `src\Domain` | Download options, link handling, and download commands |
+| `src\Infrastructure` | File storage, external tools, updates, and Windows integration |
+| `src\UI` | Windows, dialogs, controls, and visual styling |
+| `src\assets` | Images and other application assets |
+| `tests` | Automated tests |
+| `build.bat` | Application build script |
+
+### Runtime tools
+
+yt-dlp and FFmpeg are not required to compile Stash. They can be installed through the application when testing downloads.
+
+## ⚠️ Disclaimer
+
+Stash is intended for downloading content that you own or have permission to access. You are responsible for complying with applicable laws and each platform’s terms of service. The developers do not condone copyright infringement and are not responsible for misuse.
 
 ## 🙏 Show Your Support
 
 Give a ⭐️ if this project helped you!
+
+## 📄 License
+
+Stash is available under the [MIT License](LICENSE.md).
+
+
+
+
