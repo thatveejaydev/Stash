@@ -23,12 +23,7 @@ namespace MediaDownloader
             {
                 lblToolsStatus.Text = "● Engine Ready";
                 lblToolsStatus.ForeColor = Theme.AccentSuccess;
-                btnInstallTools.Text = "Update Engine";
-                btnInstallTools.Size = new Size(Dpi.Px(108), Dpi.Px(27));
-                btnInstallTools.BaseColor = Theme.BgTopBar;
-                btnInstallTools.HoverColor = Theme.BgSurfaceHover;
-                btnInstallTools.BorderColor = Color.Empty;
-                btnInstallTools.ForeColor = Theme.TextSecondary;
+                appToolTip.SetToolTip(lblToolsStatus, "Click to check for engine updates.");
             }
             else
             {
@@ -37,19 +32,17 @@ namespace MediaDownloader
                 if (!hasFfmpeg) missing.Add("FFmpeg");
                 lblToolsStatus.Text = "● Missing: " + string.Join(" & ", missing);
                 lblToolsStatus.ForeColor = Theme.AccentWarning;
-                btnInstallTools.Text = "Install yt-dlp + FFmpeg";
-                btnInstallTools.Size = new Size(Dpi.Px(165), Dpi.Px(27));
-                btnInstallTools.BaseColor = Theme.BrandPurple;
-                btnInstallTools.HoverColor = Theme.BrandPurpleHover;
-                btnInstallTools.BorderColor = Color.Empty;
-                btnInstallTools.ForeColor = Color.White;
+                appToolTip.SetToolTip(lblToolsStatus, "Click to install yt-dlp and FFmpeg.");
             }
         }
 
         private async void BtnInstallTools_Click(object sender, EventArgs e)
         {
-            if (!btnInstallTools.Enabled) return;
-            btnInstallTools.Enabled = false;
+            if (engineOperationRunning) return;
+            engineOperationRunning = true;
+            lblToolsStatus.ForeColor = Theme.TextSecondary;
+            lblToolsStatus.Cursor = Cursors.WaitCursor;
+            appToolTip.SetToolTip(lblToolsStatus, "Preparing download engines...");
             try
             {
                 if (!Directory.Exists(binFolder)) Directory.CreateDirectory(binFolder);
@@ -143,7 +136,8 @@ namespace MediaDownloader
             }
             finally
             {
-                btnInstallTools.Enabled = true;
+                engineOperationRunning = false;
+                if (!IsDisposed) lblToolsStatus.Cursor = Cursors.Hand;
             }
         }
 

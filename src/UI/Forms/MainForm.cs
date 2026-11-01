@@ -26,12 +26,11 @@ namespace MediaDownloader
         // Queue & Status Bar Controls
         private ModernButton btnCancelSelected;
         private ModernButton btnRemoveFinished;
-        private ModernButton btnInstallTools;
+        private bool engineOperationRunning;
         private ModernButton btnInformation;
         private readonly RecentLogWriter logWriter = new RecentLogWriter(Path.Combine(AppPaths.Current.DataDirectory, "logs"));
         private Label lblToolsStatus;
         private Label lblQueueStats;
-        private Label lblActiveDownloads;
         private QueueListControl queueListView;
 
 
@@ -54,7 +53,8 @@ namespace MediaDownloader
             "Video (MKV)",
             "Audio (MP3)",
             "Audio (M4A)",
-            "Audio (FLAC)"
+            "Audio (FLAC)",
+            "Audio (WAV)"
         };
 
         private static readonly string[] FormatPopupTitles = new string[]
@@ -63,7 +63,8 @@ namespace MediaDownloader
             "Video (MKV)",
             "Audio (MP3)",
             "Audio (M4A)",
-            "Audio (FLAC)"
+            "Audio (FLAC)",
+            "Audio (WAV)"
         };
 
         private static readonly string[] FormatPopupRightTags = new string[]
@@ -72,7 +73,8 @@ namespace MediaDownloader
             "4K / 8K Lossless",
             "320 kbps",
             "Original AAC",
-            "Lossless Audio"
+            "Lossless Audio",
+            "16-bit PCM"
         };
 
         private static readonly string[] QualityShortNames = new string[]
@@ -377,18 +379,6 @@ namespace MediaDownloader
             };
             lblToolsStatus.Click += BtnInstallTools_Click;
 
-            btnInstallTools = new ModernButton
-            {
-                Text = "Install yt-dlp + FFmpeg",
-                Size = new Size(Dpi.Px(165), Dpi.Px(27)),
-                Margin = new Padding(0, 0, Dpi.Px(8), 0),
-                BaseColor = Theme.BrandPurple,
-                HoverColor = Theme.BrandPurpleHover,
-                Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
-                CornerRadius = Dpi.Px(6)
-            };
-            btnInstallTools.Click += BtnInstallTools_Click;
-
             btnCancelSelected = new ModernButton
             {
                 Text = "Cancel Selected",
@@ -416,10 +406,10 @@ namespace MediaDownloader
             };
             btnRemoveFinished.Click += BtnRemoveFinished_Click;
 
-            btnInformation = new ModernButton
+            btnInformation = new InformationIconButton
             {
-                Text = "ⓘ", Size = new Size(Dpi.Px(30), Dpi.Px(27)), AccessibleName = "About Stash and updates",
-                Margin = new Padding(0, 0, Dpi.Px(8), 0), BaseColor = Theme.BgTopBar,
+                Size = new Size(Dpi.Px(30), Dpi.Px(27)), AccessibleName = "About Stash and updates",
+                Margin = new Padding(0), BaseColor = Theme.BgTopBar,
                 HoverColor = Theme.BgSurfaceHover, BorderColor = Theme.BorderSubtle,
                 ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI Symbol", 12F), CornerRadius = Dpi.Px(6)
             };
@@ -432,29 +422,26 @@ namespace MediaDownloader
 
             TableLayoutPanel statusBar = new TableLayoutPanel
             {
-                Dock = DockStyle.Bottom, Height = Dpi.Px(38), ColumnCount = 5, RowCount = 1,
+                Dock = DockStyle.Bottom, Height = Dpi.Px(38), ColumnCount = 4, RowCount = 1,
                 Padding = new Padding(Dpi.Px(20), Dpi.Px(5), Dpi.Px(18), Dpi.Px(5)), BackColor = Theme.BgTopBar
             };
-            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             lblToolsStatus.Anchor = AnchorStyles.Left;
-            lblActiveDownloads = new Label
+            Label versionLabel = new Label
             {
-                Text = "·  0 active downloads", AutoSize = true, Anchor = AnchorStyles.Left,
-                ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 8.5F),
-                Margin = new Padding(0)
+                Text = "v" + UpdateService.InstalledVersion, AutoSize = true, Anchor = AnchorStyles.Right,
+                ForeColor = Theme.TextMuted, Font = new Font("Segoe UI", 8F),
+                Margin = new Padding(Dpi.Px(12), 0, Dpi.Px(8), 0)
             };
-            btnInstallTools.Anchor = AnchorStyles.Right;
-            btnInstallTools.BaseColor = Theme.BgTopBar;
+            btnInformation.Anchor = AnchorStyles.Right;
             statusBar.Controls.Add(lblToolsStatus, 0, 0);
-            statusBar.Controls.Add(lblActiveDownloads, 1, 0);
-            statusBar.Controls.Add(btnInstallTools, 3, 0);
-            statusBar.Controls.Add(btnInformation, 4, 0);
+            statusBar.Controls.Add(versionLabel, 2, 0);
+            statusBar.Controls.Add(btnInformation, 3, 0);
             notice = new Label { AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = Theme.TextSecondary, Visible = false, Margin = new Padding(Dpi.Px(12), 0, 0, 0) };
-            statusBar.Controls.Add(notice, 2, 0);
+            statusBar.Controls.Add(notice, 1, 0);
 
             // 4. Center Custom Card Queue List
             Panel pnlCenter = new Panel

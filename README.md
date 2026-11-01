@@ -34,7 +34,7 @@ Stash is powered by two open-source tools:
 
 - Save videos as **MP4** or **MKV**.
 - Choose the best available quality or limit downloads to **4K, 1440p, 1080p, 720p, 480p, or 360p**.
-- Extract audio as **MP3, M4A, or FLAC**.
+- Extract audio as **MP3, M4A, FLAC, or WAV**. 
 - Automatically combines separate video and audio into one finished file.
 
 ### Download playlists
@@ -83,7 +83,7 @@ Stash is powered by two open-source tools:
 
 1. Download the latest `Stash.exe` from the [Releases page](https://github.com/thatveejaydev/Stash/releases/latest).
 2. Open `Stash.exe`.
-3. Select **Install yt-dlp + FFmpeg** when prompted.
+3. Click the missing-engine status in the bottom bar to install yt-dlp and FFmpeg, or accept the installation prompt when pasting a link.
 4. Copy a supported media link and select **Paste Link**.
 
 Stash requires 64-bit Windows and an internet connection. No traditional installation is required.
@@ -94,7 +94,7 @@ Stash stores your preferences and download tools in your Windows user folder. Th
 
 When upgrading from an older version, Stash automatically moves compatible settings and tools to the new location. Each Windows account and computer keeps its own copy.
 
-If the required tools are missing, select **Install yt-dlp + FFmpeg** to download them.
+If the required tools are missing, click the missing-engine status to download them. Once installed, hover over **Engine Ready** for the update hint and click it to check for engine updates.
 
 ## 🖥️ Development
 

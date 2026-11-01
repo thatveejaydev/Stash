@@ -43,6 +43,13 @@ namespace MediaDownloader
 
         public static void ParseLine(DownloadQueueItem item, string line, Action onUiChanged, Action<string> onLogLine)
         {
+            if (line.StartsWith("STASH_MEDIA:", StringComparison.Ordinal))
+            {
+                CompletedDownloadDetails details = CompletedDownloadDetails.Parse(line.Substring("STASH_MEDIA:".Length));
+                if (details != null) item.CompletedDetails = details;
+                if (onUiChanged != null) onUiChanged();
+                return;
+            }
             if (line.StartsWith("STASH_PROGRESS:", StringComparison.Ordinal))
             {
                 string[] fields = line.Substring("STASH_PROGRESS:".Length).Split('|');

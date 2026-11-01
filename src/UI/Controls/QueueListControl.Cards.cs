@@ -42,7 +42,7 @@ namespace MediaDownloader
             using (Pen icon = new Pen(Theme.BrandPurpleLight, 1.5f))
             {
                 g.FillPath(tileFill, tilePath);
-                bool audio = item.Mode == DownloadMode.BestAudioOnlyMp3 || item.Mode == DownloadMode.BestAudioOnlyM4a || item.Mode == DownloadMode.BestAudioOnlyFlac;
+                bool audio = item.Mode == DownloadMode.BestAudioOnlyMp3 || item.Mode == DownloadMode.BestAudioOnlyM4a || item.Mode == DownloadMode.BestAudioOnlyFlac || item.Mode == DownloadMode.BestAudioOnlyWav;
                 if (audio)
                 {
                     g.DrawLine(icon, tile.X + Dpi.Px(23), tile.Y + Dpi.Px(12), tile.X + Dpi.Px(23), tile.Y + Dpi.Px(25));
@@ -67,14 +67,20 @@ namespace MediaDownloader
                 Font detail = cardDetailFont;
                 TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
                 TextRenderer.DrawText(g, item.Title, title, new Rectangle(textX, rect.Y + Dpi.Px(10), textWidth, Dpi.Px(23)), Theme.TextPrimary, flags);
-                string subtitle = completed ? YtDlpCommandBuilder.GetTargetExtension(item.Mode).TrimStart('.').ToUpperInvariant() + "   ·   Completed" : item.BadgeLabel;
+                string subtitle = completed
+                    ? (item.CompletedDetails == null ? YtDlpCommandBuilder.GetTargetExtension(item.Mode).TrimStart('.').ToUpperInvariant() + "   ·   Completed" : item.CompletedDetails.GetSummary(item.Mode))
+                    : item.BadgeLabel;
                 TextRenderer.DrawText(g, subtitle, detail, new Rectangle(textX, rect.Y + Dpi.Px(32), textWidth, Dpi.Px(20)), Theme.TextSecondary, flags);
                 if (completed)
                 {
                     DrawCompletedActions(g, rect);
                     return;
                 }
-                TextRenderer.DrawText(g, item.StatusText, detail, new Rectangle(rect.Right - Dpi.Px(150), rect.Y + Dpi.Px(12), Dpi.Px(136), Dpi.Px(20)), statusColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+                string statusLabel = item.StatusText;
+                if (!string.IsNullOrWhiteSpace(statusLabel) && (item.Status == QueueItemStatus.FetchingInfo ||
+                    item.Status == QueueItemStatus.Downloading || item.Status == QueueItemStatus.Merging))
+                    statusLabel = statusLabel.TrimEnd().TrimEnd('.', '…') + "...";
+                TextRenderer.DrawText(g, statusLabel, detail, new Rectangle(rect.Right - Dpi.Px(150), rect.Y + Dpi.Px(12), Dpi.Px(136), Dpi.Px(20)), statusColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
 
                 if (item.Status == QueueItemStatus.Error)
                 {

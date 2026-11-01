@@ -266,6 +266,7 @@ namespace MediaDownloader
             Directory.CreateDirectory(item.TemporaryFolder);
             token.ThrowIfCancellationRequested();
             string arguments = YtDlpCommandBuilder.BuildArguments(item, ffmpeg);
+            item.CompletedDetails = null;
             item.StatusText = "Checking source";
             NotifyChanged();
             WriteLog(string.Format("[{0}] yt-dlp {1}", item.Id, arguments));
@@ -287,6 +288,8 @@ namespace MediaDownloader
                 item.Eta = "—";
                 NotifyChanged();
                 await StorageFileService.CleanupPartialFilesForItemAsync(item);
+                token.ThrowIfCancellationRequested();
+                item.CompletedDetails = await CompletedDownloadDetails.ReadFileAsync(item.OutputFilePath, item.CompletedDetails);
                 token.ThrowIfCancellationRequested();
                 item.ProgressPercent = 100;
                 item.Speed = "—";

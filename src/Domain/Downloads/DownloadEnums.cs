@@ -6,7 +6,8 @@ namespace MediaDownloader
         BestVideoAndAudioMkv,
         BestAudioOnlyMp3,
         BestAudioOnlyM4a,
-        BestAudioOnlyFlac
+        BestAudioOnlyFlac,
+        BestAudioOnlyWav
     }
 
     public enum VideoResolution

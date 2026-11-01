@@ -160,7 +160,7 @@ namespace MediaDownloader
                         if (folder != null) loadedHistory.Add(folder);
                     }
                     else if (key == "FormatIndex" && int.TryParse(val, out parsedInt))
-                        s.FormatIndex = Math.Max(0, Math.Min(4, parsedInt));
+                        s.FormatIndex = Math.Max(0, Math.Min((int)DownloadMode.BestAudioOnlyWav, parsedInt));
                     else if (key == "QualityIndex" && int.TryParse(val, out parsedInt))
                         s.QualityIndex = Math.Max(0, Math.Min(6, parsedInt));
                     else if (key == "EmbedMetadata" && bool.TryParse(val, out parsedBool))

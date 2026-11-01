@@ -25,6 +25,7 @@ namespace MediaDownloader
         public string Speed { get; internal set; }
         public string Eta { get; internal set; }
         public string OutputFilePath { get; internal set; }
+        public CompletedDownloadDetails CompletedDetails { get; internal set; }
         public bool MetadataResolved { get; set; }
         public DownloadFailure Failure { get; internal set; }
         internal string ErrorOutput = "";

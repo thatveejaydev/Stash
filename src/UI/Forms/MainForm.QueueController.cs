@@ -190,7 +190,6 @@ namespace MediaDownloader
             int total = queue.Count;
             int running = queue.FindAll(x => x.Status == QueueItemStatus.Downloading || x.Status == QueueItemStatus.Merging || x.Status == QueueItemStatus.FetchingInfo).Count;
             int done = queue.FindAll(x => x.Status == QueueItemStatus.Completed).Count;
-            lblActiveDownloads.Text = string.Format("·  {0} active download{1}", running, running == 1 ? "" : "s");
 
             if (running > 0)
                 lblQueueStats.Text = string.Format("QUEUE  •  {0} ACTIVE  •  {1} OF {2} COMPLETED", running, done, total);

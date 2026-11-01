@@ -91,6 +91,17 @@ internal static class AppDataStorageTests
             Assert(AppSettings.Load(readonlyPaths.SettingsPath).FormatIndex == 1, "Imported read-only settings must become writable in AppData");
         }
         finally { File.SetAttributes(readonlySettings, FileAttributes.Normal); }
+        string formatSettings = Path.Combine(testRoot, "formats", "settings.cfg");
+        for (int index = 0; index <= (int)DownloadMode.BestAudioOnlyWav; index++)
+        {
+            AppSettings savedFormat = new AppSettings(formatSettings);
+            savedFormat.FormatIndex = index;
+            savedFormat.EmbedThumbnail = true;
+            savedFormat.Save();
+            AppSettings loadedFormat = AppSettings.Load(formatSettings);
+            Assert(loadedFormat.FormatIndex == index, "All existing format indexes and the appended WAV index must round-trip unchanged");
+            Assert(loadedFormat.EmbedThumbnail, "WAV selection must not overwrite shared artwork preferences");
+        }
         Console.WriteLine("PASS: " + assertions + " AppData storage assertions");
     }
 }

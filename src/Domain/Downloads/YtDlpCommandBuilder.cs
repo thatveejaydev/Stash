@@ -15,6 +15,7 @@ namespace MediaDownloader
                 case DownloadMode.BestAudioOnlyMp3: return ".mp3";
                 case DownloadMode.BestAudioOnlyM4a: return ".m4a";
                 case DownloadMode.BestAudioOnlyFlac: return ".flac";
+                case DownloadMode.BestAudioOnlyWav: return ".wav";
                 default: return ".mp4";
             }
         }
@@ -60,11 +61,12 @@ namespace MediaDownloader
                     case DownloadMode.BestAudioOnlyMp3: formatPart = "MP3 • 320K"; break;
                     case DownloadMode.BestAudioOnlyM4a: formatPart = "M4A • BEST"; break;
                     case DownloadMode.BestAudioOnlyFlac: formatPart = "FLAC • LOSSLESS"; break;
+                    case DownloadMode.BestAudioOnlyWav: formatPart = "WAV • 16-BIT PCM"; break;
                     default: formatPart = "AUDIO"; break;
                 }
             }
 
-            if (meta || thumb)
+            if (meta || (thumb && mode != DownloadMode.BestAudioOnlyWav))
             {
                 formatPart += " • TAGS";
             }
@@ -84,6 +86,7 @@ namespace MediaDownloader
 
             StringBuilder args = new StringBuilder();
             args.AppendFormat("--paths \"home:{0}\" --paths \"temp:{1}\" --print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ", Path.GetFullPath(item.OutputFolder), item.TemporaryFolder);
+            args.Append("--print \"after_move:STASH_MEDIA:%(duration)s|%(width)s|%(height)s|%(fps)s|%(ext)s\" ");
             args.Append("--newline --no-colors --progress --no-playlist --continue --windows-filenames --trim-filenames 120 ");
             args.Append("--progress-template \"download:STASH_PROGRESS:%(info.vcodec)s|%(info.acodec)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s\" ");
 
@@ -150,14 +153,18 @@ namespace MediaDownloader
                 case DownloadMode.BestAudioOnlyFlac:
                     args.Append("-f \"ba/b\" -x --audio-format flac --audio-quality 0 ");
                     break;
+                case DownloadMode.BestAudioOnlyWav:
+                    args.Append("-f \"ba/b\" -x --audio-format wav --postprocessor-args \"ExtractAudio+ffmpeg_o:-c:a pcm_s16le\" ");
+                    break;
             }
 
             if (item.EmbedMetadata)
             {
-                args.Append("--embed-metadata --embed-chapters ");
+                args.Append(item.Mode == DownloadMode.BestAudioOnlyWav
+                    ? "--embed-metadata --no-embed-chapters " : "--embed-metadata --embed-chapters ");
             }
 
-            if (item.EmbedThumbnail)
+            if (item.EmbedThumbnail && item.Mode != DownloadMode.BestAudioOnlyWav)
             {
                 args.Append("--embed-thumbnail --convert-thumbnails jpg ");
             }

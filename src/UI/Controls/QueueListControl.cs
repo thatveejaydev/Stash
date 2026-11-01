@@ -18,19 +18,21 @@ namespace MediaDownloader
             public DownloadMode Mode;
             public double Progress;
             public int Height;
+            public CompletedDownloadDetails Details;
 
             public CardSnapshot(DownloadQueueItem item, int height)
             {
                 Title = item.Title; Badge = item.BadgeLabel; StatusText = item.StatusText;
                 Speed = item.Speed; Eta = item.Eta; Status = item.Status;
                 Mode = item.Mode; Progress = item.ProgressPercent; Height = height;
+                Details = item.CompletedDetails;
             }
 
             public bool Matches(DownloadQueueItem item)
             {
                 return Title == item.Title && Badge == item.BadgeLabel && StatusText == item.StatusText
                     && Speed == item.Speed && Eta == item.Eta && Status == item.Status
-                    && Mode == item.Mode && Progress == item.ProgressPercent;
+                    && Mode == item.Mode && Progress == item.ProgressPercent && Details == item.CompletedDetails;
             }
         }
         private readonly Dictionary<DownloadQueueItem, CardSnapshot> snapshots = new Dictionary<DownloadQueueItem, CardSnapshot>();

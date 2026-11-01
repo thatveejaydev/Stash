@@ -99,8 +99,17 @@ internal static class DownloadManagerTests
         await Until(() => first.ProgressPercent == 25);
         Assert(first.Speed == "8.4 Mbps", "Output should be parsed on the owner thread");
         Assert(stateNotifications == beforeProgress && progressNotifications == 1, "Progress must use the throttled notification path");
+        string completedFile = Path.Combine(testFolder, "completed-media.mp4");
+        File.WriteAllBytes(completedFile, new byte[1452]);
+        runner.Calls[0].Output("STASH_FINAL:" + completedFile);
+        runner.Calls[0].Output("STASH_MEDIA:304|3840|2160|25|mp4");
         runner.Calls[0].Result.SetResult(0);
         await Until(() => first.Status == QueueItemStatus.Completed);
+        Assert(first.CompletedDetails != null && first.CompletedDetails.FileSizeBytes == 1452,
+            "Completed download must retain final metadata and read actual output size");
+        Assert(first.CompletedDetails.GetSummary(first.Mode) == "05:04   ·   1.5 KB   ·   MP4   ·   3840×2160 (4K)   ·   25 fps",
+            "Completed video summary must include duration, size, final format, actual resolution and frame rate");
+        Assert(runner.Calls[0].Arguments.Contains("after_move:STASH_MEDIA:"), "Download command must request final selected media metadata");
         Assert(runner.Calls.Count == 2, "Paused queued item must not start after another finishes");
         manager.TogglePauseResume(third);
         Assert(runner.Calls.Count == 3, "Resume should fill the available slot");
@@ -325,6 +334,32 @@ internal static class DownloadManagerTests
         }
         testFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(testFolder);
+        Assert((int)DownloadMode.BestAudioOnlyFlac == 4 && (int)DownloadMode.BestAudioOnlyWav == 5, "WAV must append without changing saved format indexes");
+        DownloadQueueItem wav = new DownloadQueueItem("https://example.com/audio", DownloadMode.BestAudioOnlyWav,
+            VideoResolution.Uhd2160p, true, true, 1, "WAV", testFolder);
+        wav.EmbedSubtitles = true; wav.IncludeAutoCaptions = true;
+        string wavArguments = YtDlpCommandBuilder.BuildArguments(wav, null);
+        Assert(wavArguments.Contains("-f \"ba/b\" -x --audio-format wav") && wavArguments.Contains("ExtractAudio+ffmpeg_o:-c:a pcm_s16le"),
+            "WAV must extract best audio as explicit 16-bit PCM");
+        Assert(!wavArguments.Contains("-ar ") && !wavArguments.Contains("-ac "), "WAV must preserve source sample rate and channel count");
+        Assert(wavArguments.Contains("--embed-metadata ") && wavArguments.Contains("--no-embed-chapters") &&
+            !wavArguments.Contains("--embed-thumbnail") && !wavArguments.Contains("--convert-thumbnails") &&
+            !wavArguments.Contains("--embed-chapters") && !wavArguments.Contains("--write-subs") && !wavArguments.Contains("--write-auto-subs"),
+            "WAV must keep basic metadata without unsupported artwork, chapters or subtitles");
+        Assert(wav.EmbedThumbnail && wav.EmbedMetadata, "WAV command generation must not mutate user embedding preferences");
+        Assert(YtDlpCommandBuilder.GetTargetExtension(wav.Mode) == ".wav", "WAV must use the correct extension for rename and duplicate handling");
+        Assert(YtDlpCommandBuilder.BuildBadgeLabel(wav.Mode, wav.Resolution, false, true, 1) == "WAV   ·   16-BIT PCM",
+            "WAV badge must identify PCM without claiming unsupported artwork");
+        CompletedDownloadDetails wavDetails = CompletedDownloadDetails.Parse("304|3840|2160|25|wav");
+        string wavFile = Path.Combine(testFolder, "summary.wav");
+        File.WriteAllBytes(wavFile, new byte[1500]);
+        wavDetails = CompletedDownloadDetails.ReadFileAsync(wavFile, wavDetails).GetAwaiter().GetResult();
+        Assert(wavDetails.GetSummary(wav.Mode) == "05:04   ·   1.5 KB   ·   WAV", "Completed WAV summary must contain duration, actual size and format without video details");
+        DownloadQueueItem flac = new DownloadQueueItem("https://example.com/audio", DownloadMode.BestAudioOnlyFlac,
+            VideoResolution.Best, true, true, 1, "FLAC", testFolder);
+        string flacArguments = YtDlpCommandBuilder.BuildArguments(flac, null);
+        Assert(flacArguments.Contains("--audio-format flac") && flacArguments.Contains("--embed-thumbnail") && flacArguments.Contains("--embed-chapters"),
+            "Existing formats must retain their embedding behavior");
         Assert(!DownloadUrlValidator.IsPlaylistUrl("https://www.youtube.com/shorts/abcdefghijk"), "A Shorts permalink must bypass the playlist picker");
         Assert(!DownloadUrlValidator.IsPlaylistUrl("https://m.youtube.com/shorts/abcdefghijk?si=share&list=PL123"), "A Shorts permalink with share or playlist parameters must remain a single video");
         Assert(DownloadUrlValidator.IsPlaylistUrl("https://www.youtube.com/@creator/shorts"), "A channel Shorts tab must remain a listing");
@@ -363,6 +398,18 @@ internal static class DownloadManagerTests
         AppDataStorageTests.Run(Path.Combine(testFolder, "storage"));
         ErrorFeatureTests.Run(Path.Combine(testFolder, "logs"));
         UpdateServiceTests.Run(Path.Combine(testFolder, "updates"));
+        CompletedDownloadDetails media = CompletedDownloadDetails.Parse("3661.5|1080|1920|29.97|mkv");
+        Assert(media.GetSummary(DownloadMode.BestVideoAndAudioMkv) == "1:01:01   ·   MKV   ·   1080×1920 (Full HD)   ·   29.97 fps",
+            "Completed metadata must support long durations, portrait resolution and fractional fps");
+        Assert(media.GetSummary(DownloadMode.BestAudioOnlyMp3) == "1:01:01   ·   MKV", "Audio summaries must omit source video dimensions and fps");
+        Assert(CompletedDownloadDetails.Parse("NA|NA|NA|NA|mp3").GetSummary(DownloadMode.BestAudioOnlyMp3) == "MP3   ·   Completed",
+            "Unavailable metadata must not be guessed or displayed as NA");
+        Assert(CompletedDownloadDetails.Parse("NaN|-1|Infinity|0|mp4").GetSummary(DownloadMode.BestVideoAndAudioMp4) == "MP4   ·   Completed",
+            "Invalid metadata must not leak into completed summaries");
+        Assert(CompletedDownloadDetails.Parse("invalid") == null, "Malformed metadata lines must be ignored");
+        CompletedDownloadDetails missingFile = CompletedDownloadDetails.ReadFileAsync(Path.Combine(testFolder, "missing-output.mp4"), media).GetAwaiter().GetResult();
+        Assert(!missingFile.FileSizeBytes.HasValue && missingFile.DurationSeconds == media.DurationSeconds,
+            "Missing files must preserve known metadata without failing completion");
         UiContext context = new UiContext();
         SynchronizationContext.SetSynchronizationContext(context);
         Task tests = RunAll();
