@@ -12,9 +12,7 @@ A fast, lightweight **video and audio downloader** for **Windows**. Stash runs e
 
 </div>
 
-<p align="center">
-  <img src="src/assets/stash ui.png" alt="Stash screenshot" width="700">
-</p>
+https://github.com/user-attachments/assets/c5a21e4c-a1b2-4c9e-9555-1b8483294d6b
 
 ## 🔋 Powered By
 
