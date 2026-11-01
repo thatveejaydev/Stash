@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.1
+
+### New Features
+- **In-App Updates:** Stash checks for new stable releases on startup. Use **Check for Updates** to check manually, view release notes, and download a verified update before restarting.
+
+### Improvements & Fixes
+- **YouTube Shorts:** Pasting an individual Shorts link now downloads the video directly instead of opening the playlist picker. Channel Shorts tabs and playlists still open the picker.
+- **Version Metadata:** The application and Windows executable metadata now consistently report the release version.
+
 ## v0.2.0
 
 ### New Features

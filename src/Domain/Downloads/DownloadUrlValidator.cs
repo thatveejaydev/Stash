@@ -49,13 +49,25 @@ namespace MediaDownloader
         public static bool IsPlaylistUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return false;
+            Uri uri;
+            if (Uri.TryCreate(url, UriKind.Absolute, out uri))
+            {
+                string host = uri.Host;
+                bool isYouTube = string.Equals(host, "youtube.com", StringComparison.OrdinalIgnoreCase)
+                    || host.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase);
+                string[] segments = uri.AbsolutePath.Trim('/').Split('/');
+                // A Shorts permalink identifies one video, even with playlist/share parameters.
+                if (isYouTube && segments.Length == 2
+                    && string.Equals(segments[0], "shorts", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(segments[1])) return false;
+            }
             string u = url.ToLowerInvariant();
             return u.Contains("list=")
                 || u.Contains("/playlist")
                 || u.Contains("/sets/")
                 || u.Contains("/album/")
                 || u.Contains("/videos")
-                || u.Contains("/shorts");
+                || (uri != null && uri.AbsolutePath.TrimEnd('/').EndsWith("/shorts", StringComparison.OrdinalIgnoreCase));
         }
 
         // Extracts single video URL from a URL that contains both a video and a playlist parameter

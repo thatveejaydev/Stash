@@ -325,6 +325,11 @@ internal static class DownloadManagerTests
         }
         testFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(testFolder);
+        Assert(!DownloadUrlValidator.IsPlaylistUrl("https://www.youtube.com/shorts/abcdefghijk"), "A Shorts permalink must bypass the playlist picker");
+        Assert(!DownloadUrlValidator.IsPlaylistUrl("https://m.youtube.com/shorts/abcdefghijk?si=share&list=PL123"), "A Shorts permalink with share or playlist parameters must remain a single video");
+        Assert(DownloadUrlValidator.IsPlaylistUrl("https://www.youtube.com/@creator/shorts"), "A channel Shorts tab must remain a listing");
+        Assert(DownloadUrlValidator.IsPlaylistUrl("https://www.youtube.com/playlist?list=PL123"), "Explicit playlists must retain the playlist picker");
+        Assert(!DownloadUrlValidator.IsPlaylistUrl("https://www.youtube.com/watch?v=abcdefghijk"), "Ordinary video links must remain single videos");
         DownloadQueueItem stageItem = Item();
         YtDlpOutputParser.ParseLine(stageItem, "[info] test: Downloading 1 format(s): 137+140", null, null);
         Assert(stageItem.StatusText == "Resolving best format", "Format selection should be visible");
