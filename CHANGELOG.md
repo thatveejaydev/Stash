@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.4
+
+### New Features
+- **WAV Audio:** Download audio as 16-bit PCM WAV while preserving the source sample rate and channel count. WAV skips unsupported cover-art and chapter embedding.
+- **Completed Download Details:** Finished cards now show duration, actual file size, format, resolution, and frame rate where available; audio downloads omit video-only information.
+
+### Improvements & Fixes
+- **Consistent Status Labels:** Active download labels now end with three dots, such as "Checking source..." and "Downloading video...".
+- **Cleaner Footer:** Removed the active-download count and separate Update Engine button. Engine Ready remains clickable and explains engine updates in a tooltip.
+- **App Information:** Centered the information icon and added a subtle version label beside it.
+- **Readable Engine Updates:** Engine-update text stays readable while busy, with a wait cursor and protection against duplicate clicks.
+
 ## v0.2.3
 
 ### Improvements & Fixes
