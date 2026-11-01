@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.2
+
+### Improvements & Fixes
+- **Update Version Verification:** Reject release executables whose embedded version does not match the release tag, preventing repeated update prompts caused by an outdated release asset.
+- **Portable Update Reliability:** Safely replace portable copies stored on another drive, wait for Stash to exit before replacement, and restore the previous executable if the updated application fails to start.
+
 ## v0.2.1
 
 ### New Features

@@ -35,6 +35,25 @@ internal static class UpdateServiceTests
         string fixture = Path.Combine(testRoot, "hash-fixture");
         File.WriteAllText(fixture, "stash");
         Assert(UpdateService.ComputeSha256(fixture).Length == 64, "File SHA-256 must be produced");
+        string testExecutable = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        UpdateService.ValidateExecutableVersion(testExecutable, UpdateService.InstalledVersion);
+        bool wrongVersion = false;
+        try { UpdateService.ValidateExecutableVersion(testExecutable, "99.0.0"); }
+        catch (InvalidDataException) { wrongVersion = true; }
+        Assert(wrongVersion, "A checksum-valid executable with the wrong release version must be rejected");
+
+        string target = Path.Combine(testRoot, "installed.exe");
+        string source = Path.Combine(testRoot, "downloaded.exe");
+        File.WriteAllText(target, "old"); File.WriteAllText(source, "new");
+        UpdateApplier.ReplaceAndLaunch(source, target, path =>
+            Assert(File.ReadAllText(path) == "new", "Restart must launch the replaced executable"));
+        Assert(File.ReadAllText(target) == "new" && !File.Exists(source), "Successful update must retain new bytes and clean the download");
+        File.WriteAllText(target, "old"); File.WriteAllText(source, "new");
+        bool rolledBack = false;
+        try { UpdateApplier.ReplaceAndLaunch(source, target, path => { throw new IOException("simulated startup failure"); }); }
+        catch (IOException) { rolledBack = true; }
+        Assert(rolledBack && File.ReadAllText(target) == "old", "Failed restart must restore previous executable");
+        Assert(Directory.GetFiles(testRoot, "*.backup").Length == 0, "Successful rollback must consume its backup");
         Console.WriteLine("PASS: " + assertions + " updater assertions");
     }
 }

@@ -101,6 +101,7 @@ namespace MediaDownloader
                 string actual = ComputeSha256(temporary);
                 if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("The downloaded update failed SHA-256 verification.");
+                ValidateExecutableVersion(temporary, update.Version);
                 if (File.Exists(destination)) File.Delete(destination);
                 File.Move(temporary, destination);
                 return destination;
@@ -115,6 +116,17 @@ namespace MediaDownloader
             if (hash.Length != 64) throw new InvalidDataException("The update checksum is invalid.");
             for (int i = 0; i < hash.Length; i++) if (!Uri.IsHexDigit(hash[i])) throw new InvalidDataException("The update checksum is invalid.");
             return hash;
+        }
+
+        internal static void ValidateExecutableVersion(string path, string expectedVersion)
+        {
+            Version expected, actual;
+            string productVersion = FileVersionInfo.GetVersionInfo(path).ProductVersion;
+            if (!SemanticVersion.TryParse(expectedVersion, out expected) ||
+                !SemanticVersion.TryParse(productVersion, out actual) || actual != expected)
+                throw new InvalidDataException("The release advertises Stash v" + expectedVersion +
+                    ", but its executable reports " + (string.IsNullOrWhiteSpace(productVersion) ? "no version" : productVersion) +
+                    ". The release publisher must upload the correct executable and checksum.");
         }
 
         internal static string ComputeSha256(string path)
