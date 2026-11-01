@@ -9,38 +9,24 @@ namespace MediaDownloader
     public partial class MainForm
     {
         private readonly UpdateService updateService = new UpdateService(AppPaths.Current.UpdatesDirectory);
-        private bool updateCheckRunning;
+        private bool informationDialogOpen;
         private bool applyingUpdate;
 
-        private async Task CheckForUpdatesAsync(bool userInitiated)
+        private async Task ShowInformationAsync()
         {
-            if (updateCheckRunning || applyingUpdate) return;
-            updateCheckRunning = true;
-            if (btnCheckUpdates != null) { btnCheckUpdates.Enabled = false; btnCheckUpdates.Text = "Checking..."; }
+            if (informationDialogOpen || applyingUpdate) return;
+            informationDialogOpen = true;
             try
             {
-                UpdateInfo update = await updateService.CheckAsync();
-                if (IsDisposed) return;
-                if (update == null)
+                using (AppInformationDialog dialog = new AppInformationDialog(updateService))
                 {
-                    if (userInitiated) MessageBox.Show(this, "You are running the latest stable version of Stash.",
-                        "No Updates Available", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedUpdate != null)
+                        await DownloadAndApplyUpdateAsync(dialog.SelectedUpdate);
                 }
-                using (UpdateAvailableDialog dialog = new UpdateAvailableDialog(update))
-                {
-                    if (dialog.ShowDialog(this) == DialogResult.OK) await DownloadAndApplyUpdateAsync(update);
-                }
-            }
-            catch (Exception ex)
-            {
-                if (userInitiated && !IsDisposed) MessageBox.Show(this, "Stash could not check for updates.\n\n" + ex.Message,
-                    "Update Check Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
-                updateCheckRunning = false;
-                if (btnCheckUpdates != null && !btnCheckUpdates.IsDisposed) { btnCheckUpdates.Enabled = true; btnCheckUpdates.Text = "Check for Updates"; }
+                informationDialogOpen = false;
             }
         }
 

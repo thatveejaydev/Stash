@@ -76,7 +76,9 @@ Run `build.bat` from Command Prompt or PowerShell:
 
 This produces `dist\Stash.exe` and `Stash.exe`.
 
-Release builds also produce `Stash.exe.sha256`. To enable in-app updates, create a stable GitHub Release with a `vMAJOR.MINOR.PATCH` tag and attach both `Stash.exe` and `Stash.exe.sha256`; the release description is shown as the update notes. Keep `AssemblyInformationalVersion` in `src\Properties\AssemblyInfo.cs` synchronized with the release tag.
+Release builds also produce `Stash.exe.sha256`. To enable in-app updates, create a stable GitHub Release with a `vMAJOR.MINOR.PATCH` tag and attach both `Stash.exe` and `Stash.exe.sha256`. Keep `AssemblyInformationalVersion` in `src\Properties\AssemblyInfo.cs` synchronized with the release tag.
+
+Use the **ⓘ** button to open app information, then select **Check for Updates** to check manually. Stash does not check on startup or when opening this dialog. **View Release** opens the release notes on GitHub; **Update and Restart** appears when a newer version is available.
 
 ## 🙏 Show Your Support
 

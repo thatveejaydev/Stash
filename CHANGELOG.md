@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.3
+
+### Improvements & Fixes
+- **About Stash:** Open the new compact information dialog from the **ⓘ** button to see the installed version and update controls.
+- **Manual Update Checks:** Check for updates only when you click **Check for Updates** inside About Stash. Stash no longer checks automatically on startup or when opening the dialog.
+- **Simpler Release Access:** **View Release** opens release notes on GitHub. The in-app release-notes panel and preview toggle have been removed.
+- **GitHub Support:** Added a **Give a star on GitHub** prompt with a centered yellow star button that opens the repository.
+- **Cleaner Window Title:** The title bar now shows **Stash**; the version is displayed in About Stash.
+
 ## v0.2.2
 
 ### Improvements & Fixes

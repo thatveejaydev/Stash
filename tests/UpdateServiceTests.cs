@@ -54,6 +54,38 @@ internal static class UpdateServiceTests
         catch (IOException) { rolledBack = true; }
         Assert(rolledBack && File.ReadAllText(target) == "old", "Failed restart must restore previous executable");
         Assert(Directory.GetFiles(testRoot, "*.backup").Length == 0, "Successful rollback must consume its backup");
+        int checks = 0;
+        System.Threading.Tasks.TaskCompletionSource<UpdateInfo> pending = new System.Threading.Tasks.TaskCompletionSource<UpdateInfo>();
+        using (AppInformationDialog dialog = new AppInformationDialog(() => { checks++; return pending.Task; }))
+        {
+            dialog.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
+            dialog.Location = new System.Drawing.Point(-32000, -32000);
+            dialog.Show();
+            System.Windows.Forms.Application.DoEvents();
+            ModernButton check = (ModernButton)dialog.Controls.Find("CheckForUpdates", true)[0];
+            ModernButton install = (ModernButton)dialog.Controls.Find("InstallUpdate", true)[0];
+            Assert(checks == 0 && check.Visible && !install.Visible, "Opening information must not check for updates or offer installation");
+            check.PerformClick();
+            check.PerformClick();
+            Assert(checks == 1 && !check.Enabled, "Only an explicit click must start a check and duplicate requests must be blocked");
+            pending.SetResult(new UpdateInfo { Version = "0.2.3" });
+            for (int i = 0; i < 10; i++) System.Windows.Forms.Application.DoEvents();
+            Assert(dialog.SelectedUpdate != null && install.Visible && !check.Visible, "A newer release must enable the restart action");
+            using (System.Drawing.Bitmap bitmap = new System.Drawing.Bitmap(dialog.Width, dialog.Height))
+            {
+                dialog.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height));
+                bitmap.Save(Path.Combine(testRoot, "update-dialog.png"));
+            }
+        }
+        using (AppInformationDialog dialog = new AppInformationDialog(() => System.Threading.Tasks.Task.FromResult<UpdateInfo>(null)))
+        {
+            dialog.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
+            dialog.Location = new System.Drawing.Point(-32000, -32000);
+            dialog.Show();
+            ((ModernButton)dialog.Controls.Find("CheckForUpdates", true)[0]).PerformClick();
+            Assert(dialog.SelectedUpdate == null && dialog.Controls.Find("UpdateStatus", true)[0].Text.Contains("up to date"),
+                "No update must show an up-to-date status without enabling installation");
+        }
         Console.WriteLine("PASS: " + assertions + " updater assertions");
     }
 }

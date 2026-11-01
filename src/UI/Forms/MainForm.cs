@@ -27,7 +27,7 @@ namespace MediaDownloader
         private ModernButton btnCancelSelected;
         private ModernButton btnRemoveFinished;
         private ModernButton btnInstallTools;
-        private ModernButton btnCheckUpdates;
+        private ModernButton btnInformation;
         private readonly RecentLogWriter logWriter = new RecentLogWriter(Path.Combine(AppPaths.Current.DataDirectory, "logs"));
         private Label lblToolsStatus;
         private Label lblQueueStats;
@@ -135,11 +135,7 @@ namespace MediaDownloader
             FitInitialWindowToScreen();
             ApplyDarkTitleBar();
             CheckToolsStatus();
-            Shown += async (sender, args) =>
-            {
-                updateService.CleanupStaleFiles();
-                await CheckForUpdatesAsync(false);
-            };
+            Shown += (sender, args) => updateService.CleanupStaleFiles();
         }
 
         private void FitInitialWindowToScreen()
@@ -230,7 +226,7 @@ namespace MediaDownloader
             // Geometry is explicitly converted from 96-DPI units by Dpi.Px.
             // Disable WinForms' additional automatic pass to avoid double scaling.
             AutoScaleMode = AutoScaleMode.None;
-            Text = "Stash v" + Application.ProductVersion;
+            Text = "Stash";
             Size = new Size(Dpi.Px(1020), Dpi.Px(660));
             MinimumSize = new Size(Dpi.Px(880), Dpi.Px(520));
             StartPosition = FormStartPosition.CenterScreen;
@@ -420,14 +416,15 @@ namespace MediaDownloader
             };
             btnRemoveFinished.Click += BtnRemoveFinished_Click;
 
-            btnCheckUpdates = new ModernButton
+            btnInformation = new ModernButton
             {
-                Text = "Check for Updates", Size = new Size(Dpi.Px(120), Dpi.Px(27)),
+                Text = "ⓘ", Size = new Size(Dpi.Px(30), Dpi.Px(27)), AccessibleName = "About Stash and updates",
                 Margin = new Padding(0, 0, Dpi.Px(8), 0), BaseColor = Theme.BgTopBar,
                 HoverColor = Theme.BgSurfaceHover, BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 8.5F), CornerRadius = Dpi.Px(6)
+                ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI Symbol", 12F), CornerRadius = Dpi.Px(6)
             };
-            btnCheckUpdates.Click += async (s, e) => await CheckForUpdatesAsync(true);
+            appToolTip.SetToolTip(btnInformation, "About Stash and updates");
+            btnInformation.Click += async (s, e) => await ShowInformationAsync();
 
             pnlQueueBar.Controls.Add(lblQueueStats, 0, 0);
             pnlQueueBar.Controls.Add(btnCancelSelected, 1, 0);
@@ -455,7 +452,7 @@ namespace MediaDownloader
             statusBar.Controls.Add(lblToolsStatus, 0, 0);
             statusBar.Controls.Add(lblActiveDownloads, 1, 0);
             statusBar.Controls.Add(btnInstallTools, 3, 0);
-            statusBar.Controls.Add(btnCheckUpdates, 4, 0);
+            statusBar.Controls.Add(btnInformation, 4, 0);
             notice = new Label { AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = Theme.TextSecondary, Visible = false, Margin = new Padding(Dpi.Px(12), 0, 0, 0) };
             statusBar.Controls.Add(notice, 2, 0);
 
