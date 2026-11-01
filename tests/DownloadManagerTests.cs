@@ -357,6 +357,7 @@ internal static class DownloadManagerTests
         Assert(progressItem.StatusText == "Downloading" && progressItem.ProgressPercent == 25, "Unknown progress fallback");
         AppDataStorageTests.Run(Path.Combine(testFolder, "storage"));
         ErrorFeatureTests.Run(Path.Combine(testFolder, "logs"));
+        UpdateServiceTests.Run(Path.Combine(testFolder, "updates"));
         UiContext context = new UiContext();
         SynchronizationContext.SetSynchronizationContext(context);
         Task tests = RunAll();

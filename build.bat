@@ -19,6 +19,7 @@ if not exist "%CSC%" (
         /r:System.dll ^
         /r:System.Core.dll ^
         /r:System.Drawing.dll ^
+        /r:System.Web.Extensions.dll ^
         /r:System.Windows.Forms.dll ^
         /recurse:"%~dp0src\*.cs"
 
@@ -27,8 +28,18 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
+set "STASH_HASH="
+for /f "skip=1 tokens=*" %%H in ('certutil -hashfile "%~dp0Stash.exe" SHA256') do if not defined STASH_HASH set "STASH_HASH=%%H"
+set "STASH_HASH=%STASH_HASH: =%"
+if not defined STASH_HASH (
+    echo [ERROR] Could not generate Stash.exe.sha256
+    exit /b 1
+)
+>"%~dp0Stash.exe.sha256" echo %STASH_HASH%  Stash.exe
+
 if exist "%~dp0dist" (
     copy /Y "%~dp0Stash.exe" "%~dp0dist\Stash.exe" >nul
+    copy /Y "%~dp0Stash.exe.sha256" "%~dp0dist\Stash.exe.sha256" >nul
 )
 
 echo [SUCCESS] Built standalone executable: %~dp0Stash.exe

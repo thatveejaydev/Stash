@@ -21,10 +21,12 @@ internal static class AppDataStorageTests
         AppPaths paths = new AppPaths(firstLocation, localData);
         Assert(paths.SettingsPath == Path.Combine(localData, "Stash", "settings.cfg"), "Settings must use per-user storage");
         Assert(paths.EnginesDirectory == Path.Combine(localData, "Stash", "bin"), "Engines must use per-user storage");
+        Assert(paths.UpdatesDirectory == Path.Combine(localData, "Stash", "updates"), "Updates must use per-user staging storage");
         File.WriteAllText(Path.Combine(firstLocation, "settings.cfg"), "FormatIndex=3\nParallelCount=4\n");
         foreach (string engine in new[] { "yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe" })
             File.WriteAllText(Path.Combine(firstLocation, "bin", engine), engine + " fixture");
         paths.Initialize();
+        Assert(Directory.Exists(paths.UpdatesDirectory), "Update staging must be created during initialization");
         Assert(File.Exists(paths.SettingsPath), "Legacy settings must migrate");
         Assert(!File.Exists(Path.Combine(firstLocation, "settings.cfg")), "Migrated writable settings must leave the EXE directory");
         Assert(!Directory.Exists(Path.Combine(firstLocation, "bin")), "Empty legacy bin must be removed");
