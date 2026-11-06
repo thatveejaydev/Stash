@@ -8,6 +8,7 @@ namespace MediaDownloader
         public string Id { get; set; }
         public string Url { get; set; }
         public string Title { get; set; }
+        internal Uri ThumbnailUri { get; set; }
         public DownloadMode Mode { get; set; }
         public VideoResolution Resolution { get; set; }
         public bool EmbedMetadata { get; set; }

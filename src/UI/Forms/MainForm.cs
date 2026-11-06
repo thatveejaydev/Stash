@@ -70,7 +70,7 @@ namespace MediaDownloader
         private static readonly string[] FormatPopupRightTags = new string[]
         {
             "Best Compatibility",
-            "4K / 8K Lossless",
+            "Best Source Quality",
             "320 kbps",
             "Original AAC",
             "Lossless Audio",
@@ -453,7 +453,8 @@ namespace MediaDownloader
 
             queueListView = new QueueListControl
             {
-                Dock = DockStyle.Fill
+                Dock = DockStyle.Fill,
+                ThumbnailDecoderPath = ffmpegPath
             };
             queueListView.PauseResumeRequested += TogglePauseResumeItem;
             queueListView.CancelRequested += CancelSingleItem;

@@ -87,6 +87,7 @@ namespace MediaDownloader
             StringBuilder args = new StringBuilder();
             args.AppendFormat("--paths \"home:{0}\" --paths \"temp:{1}\" --print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ", Path.GetFullPath(item.OutputFolder), item.TemporaryFolder);
             args.Append("--print \"after_move:STASH_MEDIA:%(duration)s|%(width)s|%(height)s|%(fps)s|%(ext)s\" ");
+            args.Append("--print \"before_dl:STASH_THUMBNAIL:%(thumbnail)s\" ");
             args.Append("--newline --no-colors --progress --no-playlist --continue --windows-filenames --trim-filenames 120 ");
             args.Append("--progress-template \"download:STASH_PROGRESS:%(info.vcodec)s|%(info.acodec)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s\" ");
 
@@ -110,7 +111,8 @@ namespace MediaDownloader
                 {
                     // Adaptive Smart Muxing Without Re-encoding:
                     // 1) For <= 1080p caps: prioritize native H.264 (avc) + AAC (mp4a/m4a) for instant 1-second FFmpeg stream copy and universal compatibility, with safe fallbacks.
-                    // 2) For Best / 1440p / 4K: sort by highest resolution first, then prefer H.264/AAC at that resolution, and always prefer native AAC audio (m4a) so FFmpeg never has to re-encode audio.
+                    // 2) For Best / 1440p / 4K: rank resolution first, then use yt-dlp's codec order (AV1 before VP9).
+                    // Prefer native AAC audio for the MP4 mux.
                     string mp4Filter;
                     string mp4Sort;
                     if (heightCap > 0 && heightCap <= 1080)
@@ -125,12 +127,12 @@ namespace MediaDownloader
                         mp4Filter = string.Format(
                             "bv*[height<={0}]+ba[acodec^=mp4a]/bv*[height<={0}]+ba[ext=m4a]/bv*[height<={0}]+ba/b[height<={0}]/bv*+ba/b",
                             heightCap);
-                        mp4Sort = string.Format("res:{0},vcodec:h264,acodec:aac,ext:mp4:m4a", heightCap);
+                        mp4Sort = string.Format("res:{0},vcodec,acodec:aac,ext:mp4:m4a", heightCap);
                     }
                     else
                     {
                         mp4Filter = "bv*+ba[acodec^=mp4a]/bv*+ba[ext=m4a]/bv*+ba/b";
-                        mp4Sort = "res,vcodec:h264,acodec:aac,ext:mp4:m4a";
+                        mp4Sort = "res,vcodec,acodec:aac,ext:mp4:m4a";
                     }
                     args.AppendFormat("-f \"{0}\" -S \"{1}\" --merge-output-format mp4 ", mp4Filter, mp4Sort);
                     break;

@@ -43,6 +43,18 @@ namespace MediaDownloader
 
         public static void ParseLine(DownloadQueueItem item, string line, Action onUiChanged, Action<string> onLogLine)
         {
+            if (line.StartsWith("STASH_THUMBNAIL:", StringComparison.Ordinal))
+            {
+                Uri uri;
+                if (Uri.TryCreate(line.Substring("STASH_THUMBNAIL:".Length).Trim(), UriKind.Absolute, out uri) &&
+                    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+                    uri != item.ThumbnailUri)
+                {
+                    item.ThumbnailUri = uri;
+                    if (onUiChanged != null) onUiChanged();
+                }
+                return;
+            }
             if (line.StartsWith("STASH_MEDIA:", StringComparison.Ordinal))
             {
                 CompletedDownloadDetails details = CompletedDownloadDetails.Parse(line.Substring("STASH_MEDIA:".Length));

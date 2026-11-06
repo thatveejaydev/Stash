@@ -41,6 +41,9 @@ namespace MediaDownloader
         private DarkScrollBar scrollBar;
         private static readonly int RowHeight = Dpi.Px(112);
         private static readonly int RowGap = Dpi.Px(10);
+        private readonly Timer progressAnimationTimer = new Timer { Interval = 25 };
+        private readonly Dictionary<DownloadQueueItem, double> displayedProgress = new Dictionary<DownloadQueueItem, double>();
+        private int progressStripeOffset;
 
         public event EventHandler SelectionChanged;
         public event Action<DownloadQueueItem> PauseResumeRequested;
@@ -64,6 +67,7 @@ namespace MediaDownloader
             };
             scrollBar.Scroll += (s, e) => Invalidate();
             Controls.Add(scrollBar);
+            progressAnimationTimer.Tick += AnimateProgressBars;
         }
 
         public void InsertItemsAtTop(IList<DownloadQueueItem> newItems)
@@ -83,6 +87,8 @@ namespace MediaDownloader
         {
             items.Remove(item);
             snapshots.Remove(item);
+            displayedProgress.Remove(item);
+            ReleaseThumbnail(item);
             if (SelectedItem == item)
             {
                 SelectedItem = items.Count > 0 ? items[0] : null;
@@ -103,6 +109,11 @@ namespace MediaDownloader
             bool layoutChanged = false;
             foreach (DownloadQueueItem item in items)
             {
+                RefreshThumbnail(item);
+                if (item.Status == QueueItemStatus.Completed || item.Status == QueueItemStatus.Cancelled || item.Status == QueueItemStatus.Error)
+                    displayedProgress.Remove(item);
+                else if (item.Status == QueueItemStatus.Paused)
+                    displayedProgress[item] = GetProgressPercent(item);
                 int height = GetRowHeight(item);
                 CardSnapshot previous;
                 bool known = snapshots.TryGetValue(item, out previous);
@@ -265,13 +276,18 @@ namespace MediaDownloader
             return item.Status == QueueItemStatus.Completed ? Dpi.Px(64) : RowHeight;
         }
 
+        private int GetCardWidth()
+        {
+            int rightPad = scrollBar.Visible ? scrollBar.Width + Dpi.Px(6) : Dpi.Px(2);
+            return ClientSize.Width - rightPad - Dpi.Px(2);
+        }
+
         private DownloadQueueItem HitTestItemDetailed(Point pt, out int hitIndex, out Rectangle hitRect)
         {
             hitIndex = -1;
             hitRect = Rectangle.Empty;
             int yOffset = -scrollBar.Value + Dpi.Px(4);
-            int rightPad = scrollBar.Visible ? scrollBar.Width + Dpi.Px(6) : Dpi.Px(2);
-            int width = ClientSize.Width - rightPad - Dpi.Px(2);
+            int width = GetCardWidth();
 
             for (int i = 0; i < items.Count; i++)
             {
@@ -315,8 +331,7 @@ namespace MediaDownloader
             }
 
             int yOffset = -scrollBar.Value + Dpi.Px(4);
-            int rightPad = scrollBar.Visible ? scrollBar.Width + Dpi.Px(6) : Dpi.Px(2);
-            int width = ClientSize.Width - rightPad - Dpi.Px(2);
+            int width = GetCardWidth();
 
             for (int i = 0; i < items.Count; i++)
             {
