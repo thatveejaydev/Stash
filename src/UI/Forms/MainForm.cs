@@ -22,6 +22,7 @@ namespace MediaDownloader
         private InlineFlowSelector selQuality;
         private InlineFlowSelector selSaveTo;
         private InlineFlowSelector selOptions;
+        private InlineFlowSelector selBrowserCookies;
 
         // Queue & Status Bar Controls
         private ModernButton btnCancelSelected;
@@ -313,17 +314,26 @@ namespace MediaDownloader
             appToolTip.SetToolTip(selSaveTo, settings.CurrentOutputFolder);
             selSaveTo.Clicked += (s, e) => ShowSaveToHistoryPopup();
 
-            // Combined Nested Dropdown for "Embed", "Parallel", and "Turbo"
+            // Keep download options alongside the other download settings.
             selOptions = new InlineFlowSelector("", GetOptionsSummaryLabel())
             {
                 Margin = new Padding(0),
-                IconOnly = true,
-                Dock = DockStyle.Right,
                 AccessibleName = "Download options",
                 AccessibleRole = AccessibleRole.PushButton
             };
             appToolTip.SetToolTip(selOptions, "Download options");
             selOptions.Clicked += (s, e) => ShowOptionsNestedPopup();
+
+            selBrowserCookies = new InlineFlowSelector("Browser Cookies", "")
+            {
+                Margin = new Padding(0),
+                IconOnly = true,
+                Dock = DockStyle.Right,
+                AccessibleName = "Browser Cookies",
+                AccessibleRole = AccessibleRole.PushButton
+            };
+            UpdateBrowserCookiesTooltip();
+            selBrowserCookies.Clicked += (s, e) => ShowBrowserCookiesPopup();
 
             toggleSmartMode.CheckedChanged += (s, e) =>
             {
@@ -332,6 +342,7 @@ namespace MediaDownloader
                 UpdateQualitySelectorEnabledState();
                 selSaveTo.Enabled = on;
                 selOptions.Enabled = on;
+                selBrowserCookies.Enabled = on;
             };
 
             UpdateQualitySelectorEnabledState();
@@ -340,9 +351,10 @@ namespace MediaDownloader
             flowTop.Controls.Add(selDownloadFormat);
             flowTop.Controls.Add(selQuality);
             flowTop.Controls.Add(selSaveTo);
+            flowTop.Controls.Add(selOptions);
 
             pnlTopBar.Controls.Add(flowTop);
-            pnlTopBar.Controls.Add(selOptions);
+            pnlTopBar.Controls.Add(selBrowserCookies);
 
             // 2. Secondary Sub-Toolbar (Queue Stats + Engine Status + Action Buttons)
             TableLayoutPanel pnlQueueBar = new TableLayoutPanel
@@ -462,7 +474,7 @@ namespace MediaDownloader
             {
                 using (DownloadDetailsDialog dialog = new DownloadDetailsDialog(item.Failure ?? DownloadFailure.Create("Downloading", "No engine error was provided."))) dialog.ShowDialog(this);
             };
-            queueListView.RetryRequested += item => downloadManager.Retry(item);
+            queueListView.RetryRequested += item => downloadManager.Retry(item, settings.BrowserCookies);
             queueListView.RemoveRequested += item =>
             {
                 if (downloadManager.RemoveFinished(item)) queueListView.RemoveItem(item);

@@ -102,7 +102,7 @@ namespace MediaDownloader
             }
 
             // Only divide adjacent settings; the last dropdown has no trailing rule.
-            if (!string.IsNullOrEmpty(PrefixLabel))
+            if (!IconOnly && !string.IsNullOrEmpty(PrefixLabel))
             {
                 using (Pen separator = new Pen(Theme.BorderSubtle))
                     g.DrawLine(separator, Width - Dpi.Px(1), Dpi.Px(12), Width - Dpi.Px(1), Height - Dpi.Px(12));
@@ -137,6 +137,21 @@ namespace MediaDownloader
                             g.DrawRectangle(icon, i == 1 ? Dpi.Px(21) : Dpi.Px(15), y - Dpi.Px(2), Dpi.Px(3), Dpi.Px(4));
                         }
                     }
+                    else if (PrefixLabel == "Browser Cookies")
+                    {
+                        using (GraphicsPath cookie = new GraphicsPath())
+                        using (SolidBrush chip = new SolidBrush(iconColor))
+                        {
+                            cookie.AddArc(Dpi.Px(12), cy - Dpi.Px(8), Dpi.Px(16), Dpi.Px(16), -20, 300);
+                            cookie.AddBezier(cookie.GetLastPoint(), new PointF(Dpi.Px(20), cy - Dpi.Px(4)),
+                                new PointF(Dpi.Px(24), cy - Dpi.Px(1)), new PointF(Dpi.Px(27.52f), cy - Dpi.Px(2.74f)));
+                            cookie.CloseFigure();
+                            g.DrawPath(icon, cookie);
+                            g.FillEllipse(chip, Dpi.Px(15), cy - Dpi.Px(3), Dpi.Px(2.5f), Dpi.Px(2.5f));
+                            g.FillEllipse(chip, Dpi.Px(21), cy + Dpi.Px(1), Dpi.Px(2.5f), Dpi.Px(2.5f));
+                            g.FillEllipse(chip, Dpi.Px(17), cy + Dpi.Px(3), Dpi.Px(2.5f), Dpi.Px(2.5f));
+                        }
+                    }
                     else
                     {
                         PointF[] gear = new PointF[32];
@@ -161,7 +176,7 @@ namespace MediaDownloader
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 x += sVal.Width + Dpi.Px(11);
 
-                Theme.DrawChevronDown(g, new Point(x, Height / 2 + Dpi.Px(1)),
+                Theme.DrawChevron(g, new Point(x, Height / 2 + Dpi.Px(1)),
                     Enabled ? Theme.TextSecondary : Theme.TextMuted);
             }
         }

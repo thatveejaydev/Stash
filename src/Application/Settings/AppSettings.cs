@@ -56,6 +56,7 @@ namespace MediaDownloader
         public int ConcurrentFragments { get; set; }
         public bool EmbedSubtitles { get; set; }
         public bool IncludeAutoCaptions { get; set; }
+        internal CookieBrowser BrowserCookies { get; set; }
 
         private readonly string settingsPath;
 
@@ -152,6 +153,7 @@ namespace MediaDownloader
 
                     int parsedInt;
                     bool parsedBool;
+                    CookieBrowser parsedBrowser;
                     if (key == "CurrentOutputFolder" && !string.IsNullOrEmpty(val))
                         s.CurrentOutputFolder = ResolveSavedFolder(val) ?? GetDownloadsFolder();
                     else if (key == "RecentFolder" && !string.IsNullOrEmpty(val))
@@ -175,6 +177,9 @@ namespace MediaDownloader
                         s.EmbedSubtitles = parsedBool;
                     else if (key == "IncludeAutoCaptions" && bool.TryParse(val, out parsedBool))
                         s.IncludeAutoCaptions = parsedBool;
+                    else if (key == "BrowserCookies" && Enum.TryParse(val, true, out parsedBrowser) &&
+                        Enum.IsDefined(typeof(CookieBrowser), parsedBrowser))
+                        s.BrowserCookies = parsedBrowser;
                 }
 
                 if (loadedHistory.Count > 0)
@@ -201,6 +206,7 @@ namespace MediaDownloader
                 sb.AppendLine("ConcurrentFragments=" + ConcurrentFragments);
                 sb.AppendLine("EmbedSubtitles=" + EmbedSubtitles);
                 sb.AppendLine("IncludeAutoCaptions=" + IncludeAutoCaptions);
+                sb.AppendLine("BrowserCookies=" + BrowserCookies);
                 foreach (string dir in RecentFolders)
                 {
                     sb.AppendLine("RecentFolder=" + SerializeFolder(dir));

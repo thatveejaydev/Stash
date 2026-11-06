@@ -1,5 +1,17 @@
 namespace MediaDownloader
 {
+    internal enum CookieBrowser
+    {
+        None,
+        Firefox,
+        Chrome,
+        Brave,
+        Edge,
+        Opera,
+        Vivaldi,
+        Chromium
+    }
+
     public enum DownloadMode
     {
         BestVideoAndAudioMp4,

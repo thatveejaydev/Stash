@@ -74,6 +74,12 @@ namespace MediaDownloader
             return formatPart.Replace(" • ", "   ·   ");
         }
 
+        internal static string BuildBrowserCookieArguments(CookieBrowser browser)
+        {
+            if (browser == CookieBrowser.None || !Enum.IsDefined(typeof(CookieBrowser), browser)) return "";
+            return "--cookies-from-browser " + browser.ToString().ToLowerInvariant() + " ";
+        }
+
         public static string BuildArguments(DownloadQueueItem item, string ffmpegPath)
         {
             string safeCustomName = !string.IsNullOrEmpty(item.CustomBaseFileName)
@@ -85,6 +91,7 @@ namespace MediaDownloader
                 : "%(title).100B.%(ext)s";
 
             StringBuilder args = new StringBuilder();
+            args.Append(BuildBrowserCookieArguments(item.BrowserCookies));
             args.AppendFormat("--paths \"home:{0}\" --paths \"temp:{1}\" --print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ", Path.GetFullPath(item.OutputFolder), item.TemporaryFolder);
             args.Append("--print \"after_move:STASH_MEDIA:%(duration)s|%(width)s|%(height)s|%(fps)s|%(ext)s\" ");
             args.Append("--print \"before_dl:STASH_THUMBNAIL:%(thumbnail)s\" ");

@@ -22,6 +22,7 @@ namespace MediaDownloader
 
         private readonly string playlistUrl;
         private readonly string ytDlpPath;
+        private readonly CookieBrowser browserCookies;
         private PlaylistInfo playlistInfo;
 
         private readonly bool hasSingleVideo;
@@ -51,10 +52,13 @@ namespace MediaDownloader
         private Label lblRangeCount;
         private Panel pnlRangeInputs;
 
-        public PlaylistPromptDialog(string url, string ytDlpExePath)
+        public PlaylistPromptDialog(string url, string ytDlpExePath) : this(url, ytDlpExePath, CookieBrowser.None) { }
+
+        internal PlaylistPromptDialog(string url, string ytDlpExePath, CookieBrowser browserCookies)
         {
             playlistUrl = url;
             ytDlpPath = ytDlpExePath;
+            this.browserCookies = browserCookies;
             ResultUrls = new List<string>();
             ResultTitles = new List<string>();
 
@@ -412,6 +416,11 @@ namespace MediaDownloader
         private void UpdateQueueButtonText()
         {
             if (btnQueue == null) return;
+            if (playlistInfo != null && playlistInfo.CookieAccessFailed && playlistInfo.Entries.Count == 0)
+            {
+                btnQueue.Enabled = false;
+                return;
+            }
 
             int totalCount = (playlistInfo != null && playlistInfo.Entries.Count > 0) ? playlistInfo.Entries.Count : 0;
 
@@ -456,7 +465,7 @@ namespace MediaDownloader
 
         private async void LoadPlaylistInfoAsync()
         {
-            playlistInfo = await ExternalToolService.FetchPlaylistInfoAsync(ytDlpPath, playlistUrl);
+            playlistInfo = await ExternalToolService.FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, browserCookies);
             if (IsDisposed) return;
 
             if (playlistInfo != null && playlistInfo.Entries.Count > 0)
@@ -498,6 +507,12 @@ namespace MediaDownloader
                 lblStatus.Text = string.Format("\u25CF {0} videos ready", count);
                 lblStatus.ForeColor = Theme.AccentSuccess;
                 btnQueue.Enabled = true;
+            }
+            else if (playlistInfo != null && playlistInfo.CookieAccessFailed)
+            {
+                lblPlaylistInfo.Text = "Could not read browser cookies. Check the cookie icon in the toolbar.";
+                lblStatus.Text = "\u25CF Browser cookies unavailable";
+                lblStatus.ForeColor = Theme.AccentDanger;
             }
             else
             {

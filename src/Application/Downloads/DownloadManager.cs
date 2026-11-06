@@ -151,9 +151,15 @@ namespace MediaDownloader
 
         public void Retry(DownloadQueueItem item)
         {
+            Retry(item, null);
+        }
+
+        internal void Retry(DownloadQueueItem item, CookieBrowser? browserCookies)
+        {
             VerifyThread();
             if (stopping || item == null || !items.Contains(item) || running.ContainsKey(item) ||
                 (item.Status != QueueItemStatus.Error && item.Status != QueueItemStatus.Cancelled)) return;
+            if (browserCookies.HasValue) item.BrowserCookies = browserCookies.Value;
             if (item.Status == QueueItemStatus.Cancelled)
             {
                 item.ProgressPercent = 0;
@@ -246,7 +252,7 @@ namespace MediaDownloader
         {
             if (!item.MetadataResolved)
             {
-                Tuple<string, string> metadata = await FetchMetadataAsync(executable, item.Url, token);
+                Tuple<string, string> metadata = await FetchMetadataAsync(executable, item, token);
                 token.ThrowIfCancellationRequested();
                 if (!string.IsNullOrWhiteSpace(metadata.Item1))
                 {
@@ -307,7 +313,7 @@ namespace MediaDownloader
             }
         }
 
-        private async Task<Tuple<string, string>> FetchMetadataAsync(string executable, string url, CancellationToken token)
+        private async Task<Tuple<string, string>> FetchMetadataAsync(string executable, DownloadQueueItem item, CancellationToken token)
         {
             List<string> lines = new List<string>();
             using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
@@ -316,7 +322,8 @@ namespace MediaDownloader
                 try
                 {
                     await processRunner.RunAsync(executable,
-                        string.Format("--no-playlist --get-title --get-id --no-warnings \"{0}\"", url.Replace("\"", "")),
+                        YtDlpCommandBuilder.BuildBrowserCookieArguments(item.BrowserCookies) +
+                        string.Format("--no-playlist --get-title --get-id --no-warnings \"{0}\"", item.Url.Replace("\"", "")),
                         timeout.Token, line => { if (!string.IsNullOrWhiteSpace(line)) lines.Add(line); }, null);
                     string title = lines.Count > 0 ? StorageFileService.SanitizeFileName(lines[0].Trim()) : "";
                     string id = lines.Count > 1 ? lines[lines.Count - 1].Trim() : "";

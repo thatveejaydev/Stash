@@ -15,6 +15,7 @@ namespace MediaDownloader
         public bool EmbedThumbnail { get; set; }
         public bool EmbedSubtitles { get; set; }
         public bool IncludeAutoCaptions { get; set; }
+        internal CookieBrowser BrowserCookies { get; set; }
         public int ConcurrentFragments { get; set; }
         public string BadgeLabel { get; set; }
         public string OutputFolder { get; set; }

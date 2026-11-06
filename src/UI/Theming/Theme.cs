@@ -47,15 +47,16 @@ namespace MediaDownloader
             return path;
         }
 
-        public static void DrawChevronDown(Graphics g, Point center, Color color)
+        public static void DrawChevron(Graphics g, Point center, Color color, bool pointsUp = false)
         {
             using (Pen p = new Pen(color, 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
             {
+                int direction = pointsUp ? -1 : 1;
                 Point[] pts = new Point[]
                 {
-                    new Point(center.X - Dpi.Px(5), center.Y - Dpi.Px(2)),
-                    new Point(center.X, center.Y + Dpi.Px(3)),
-                    new Point(center.X + Dpi.Px(5), center.Y - Dpi.Px(2))
+                    new Point(center.X - Dpi.Px(5), center.Y - direction * Dpi.Px(2)),
+                    new Point(center.X, center.Y + direction * Dpi.Px(3)),
+                    new Point(center.X + Dpi.Px(5), center.Y - direction * Dpi.Px(2))
                 };
                 g.DrawLines(p, pts);
             }

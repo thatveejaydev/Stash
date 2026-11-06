@@ -55,7 +55,7 @@ namespace MediaDownloader
             // Single link that is a playlist
             if (extractedUrls.Count == 1 && DownloadUrlValidator.IsPlaylistUrl(extractedUrls[0]))
             {
-                using (PlaylistPromptDialog dlg = new PlaylistPromptDialog(extractedUrls[0], ytDlpPath))
+                using (PlaylistPromptDialog dlg = new PlaylistPromptDialog(extractedUrls[0], ytDlpPath, settings.BrowserCookies))
                 {
                     if (dlg.ShowDialog(this) == DialogResult.OK)
                     {
@@ -141,6 +141,7 @@ namespace MediaDownloader
 
                 item.EmbedSubtitles = settings.EmbedSubtitles;
                 item.IncludeAutoCaptions = settings.IncludeAutoCaptions;
+                item.BrowserCookies = settings.BrowserCookies;
 
                 if (preResolvedTitles != null && i < preResolvedTitles.Count && !string.IsNullOrWhiteSpace(preResolvedTitles[i]))
                 {

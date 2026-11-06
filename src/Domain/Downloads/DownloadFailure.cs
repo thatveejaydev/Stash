@@ -8,14 +8,28 @@ namespace MediaDownloader
         public string Suggestion { get; private set; }
         public string Stage { get; private set; }
         public string TechnicalDetails { get; private set; }
+
+        internal static bool IsBrowserCookieError(string details)
+        {
+            string text = (details ?? "").ToLowerInvariant();
+            return text.Contains("failed to decrypt with dpapi") ||
+                text.Contains("cookie database") && (text.Contains("could not") || text.Contains("failed")) ||
+                text.Contains("failed to decrypt cookies");
+        }
+
         public static DownloadFailure Create(string stage, string details)
         {
             string text = (details ?? "").ToLowerInvariant();
             string message = "Something unexpected went wrong.";
             string suggestion = "Try again. If the problem continues, copy the technical details for troubleshooting.";
-            if (text.Contains("private video")) { message = "This video is private."; suggestion = "Choose a publicly accessible video or check your access to this link."; }
+            if (IsBrowserCookieError(details))
+            {
+                message = "Could not read browser cookies.";
+                suggestion = "Open Browser Cookies using the cookie icon, choose a browser where you're signed in, then retry. Firefox is recommended on Windows.";
+            }
+            else if (text.Contains("private video")) { message = "This video is private."; suggestion = "If it plays when signed in, choose that browser from the cookie icon and retry."; }
             else if (text.Contains("unavailable") || text.Contains("404") || text.Contains("removed")) { message = "This link is no longer available."; suggestion = "Check the link or choose another video."; }
-            else if (text.Contains("age") || text.Contains("sign in") || text.Contains("403") || text.Contains("login")) { message = "This video requires access permission."; suggestion = "Check whether the site requires an account or restricts this video."; }
+            else if (text.Contains("age") || text.Contains("sign in") || text.Contains("403") || text.Contains("login")) { message = "This video requires access permission."; suggestion = "If it plays when signed in, choose that browser from the cookie icon and retry."; }
             else if (text.Contains("no space") || text.Contains("disk full")) { message = "There is not enough storage space."; suggestion = "Free up space in the download folder, then retry."; }
             else if (text.Contains("permission denied") || text.Contains("access") && text.Contains("denied")) { message = "Stash cannot write to the download folder."; suggestion = "Choose a folder you can write to, then add the link again."; }
             else if (text.Contains("timed out") || text.Contains("network") || text.Contains("connection") || text.Contains("resolve")) { message = "The internet connection was interrupted."; suggestion = "Check your connection, then retry."; }

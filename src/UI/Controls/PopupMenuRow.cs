@@ -14,6 +14,7 @@ namespace MediaDownloader
         public string TitleText { get; set; }
         public string RightBadgeText { get; set; }
         public string SubText { get; set; }
+        public bool? DropdownExpanded { get; set; }
         public Color TitleOverrideColor { get; set; }
         public bool AllowRemove { get; set; }
 
@@ -118,7 +119,8 @@ namespace MediaDownloader
             if (string.IsNullOrEmpty(SubText))
             {
                 // Single-line mode with optional right-aligned detail badge
-                int rightReserve = string.IsNullOrEmpty(RightBadgeText) ? rightMargin : Dpi.Px(120);
+                int chevronSpace = DropdownExpanded.HasValue ? Dpi.Px(22) : 0;
+                int rightReserve = (string.IsNullOrEmpty(RightBadgeText) ? rightMargin : Dpi.Px(120)) + chevronSpace;
                 Rectangle rTitle = new Rectangle(contentLeft, 0, Width - contentLeft - rightReserve, Height);
                 using (Font fTitle = new Font("Segoe UI", 9.2F, IsSelected ? FontStyle.Bold : FontStyle.Regular))
                 {
@@ -128,13 +130,16 @@ namespace MediaDownloader
 
                 if (!string.IsNullOrEmpty(RightBadgeText))
                 {
-                    Rectangle rRight = new Rectangle(Width - Dpi.Px(125), 0, Dpi.Px(115), Height);
+                    Rectangle rRight = new Rectangle(Width - Dpi.Px(125) - chevronSpace, 0, Dpi.Px(115), Height);
                     using (Font fSub = new Font("Segoe UI", 8.2F, FontStyle.Regular))
                     {
                         TextRenderer.DrawText(g, RightBadgeText, fSub, rRight, Theme.TextMuted,
                             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
                     }
                 }
+                if (DropdownExpanded.HasValue)
+                    Theme.DrawChevron(g, new Point(Width - Dpi.Px(16), Height / 2),
+                        Theme.TextSecondary, pointsUp: DropdownExpanded.Value);
             }
             else
             {

@@ -77,6 +77,7 @@ Stash is powered by two open-source tools:
 
 - Runs entirely on your Windows computer.
 - Requires no Stash account.
+- For videos that require a site login, use the toolbar's cookie menu to select a browser where you're already signed in. Firefox is recommended on Windows.
 - Uses no cloud processing or tracking.
 
 ## 📥 Installation

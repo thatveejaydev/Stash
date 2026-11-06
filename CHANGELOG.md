@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.5
+
+### New Features
+- **Browser Cookies:** Use the toolbar's cookie menu to choose a signed-in browser for playlist previews, metadata, and downloads that require an account. Firefox is recommended on Windows.
+- **Queue Thumbnails:** Download cards show widescreen artwork from the source when available.
+
+### Improvements & Fixes
+- **High-Quality MP4:** Best quality, 1440p, and 4K prefer AV1 over VP9 at the same resolution. MP4 still favors AAC audio and prefers H.264 at 1080p and below.
+- **Format Labels:** The MKV option is now labeled **Best Source Quality**.
+- **Smoother Progress:** The progress bar eases toward each update and shows moving diagonal stripes during active downloads.
+- **Toolbar Options:** Subtitles, Embed, Parallel, and Turbo are grouped after the Downloads selector. Changing Parallel, Turbo, or the browser keeps its menu open.
+- **About Stash:** Buffered painting prevents the brief white flash when opening the dialog.
+
 ## v0.2.4
 
 ### New Features

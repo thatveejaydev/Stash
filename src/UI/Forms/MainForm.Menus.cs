@@ -18,7 +18,7 @@ namespace MediaDownloader
         }
 
         // Dark Popup Helper for InlineFlowSelectors
-        private ToolStripDropDown CreateDarkPopup(Control content, InlineFlowSelector ownerSelector)
+        private ToolStripDropDown CreateDarkPopup(Control content, InlineFlowSelector ownerSelector, bool alignRight = false)
         {
             ToolStripControlHost host = new ToolStripControlHost(content)
             {
@@ -40,7 +40,8 @@ namespace MediaDownloader
             popup.Items.Add(host);
             popup.Closed += (s, e) => ownerSelector.SetOpenState(false);
             ownerSelector.SetOpenState(true);
-            popup.Show(ownerSelector, new Point(0, ownerSelector.Height + Dpi.Px(2)));
+            int x = alignRight ? ownerSelector.Width - popup.Width : 0;
+            popup.Show(ownerSelector, new Point(x, ownerSelector.Height + Dpi.Px(2)));
             return popup;
         }
 
@@ -216,15 +217,16 @@ namespace MediaDownloader
             }
         }
 
-        // Nested Dropdown containing "Subtitles", "Embed", "Parallel", and "Turbo" submenus inside a single Region-shaped popup
+        private static readonly CookieBrowser[] CookieBrowsers = (CookieBrowser[])Enum.GetValues(typeof(CookieBrowser));
+
         private void ShowOptionsNestedPopup()
         {
             int leftWidth = Dpi.Px(225);
-            int leftHeight = 4 * Dpi.Px(34) + Dpi.Px(8); // 144
+            int leftHeight = 4 * Dpi.Px(34) + Dpi.Px(8);
             int gap = Dpi.Px(4);
             int rightMaxWidth = Dpi.Px(250);
             int totalWidth = leftWidth + gap + rightMaxWidth;
-            int totalHeight = Dpi.Px(102) + (6 * Dpi.Px(46) + Dpi.Px(8)) + Dpi.Px(16); // Accommodate 4 parent rows + child submenus aligned up to alignY=102
+            int totalHeight = Dpi.Px(102) + 6 * Dpi.Px(46) + Dpi.Px(24);
 
             Panel rootContainer = new Panel
             {
@@ -375,13 +377,13 @@ namespace MediaDownloader
 
             Action openParallel = () =>
             {
-                Panel sub = BuildParallelSubmenuPanel(rowParallel, () => popup.Close());
+                Panel sub = BuildParallelSubmenuPanel(rowParallel);
                 showSubmenu(2, rowParallel, sub, Dpi.Px(68));
             };
 
             Action openTurbo = () =>
             {
-                Panel sub = BuildTurboSubmenuPanel(rowTurbo, () => popup.Close());
+                Panel sub = BuildTurboSubmenuPanel(rowTurbo);
                 showSubmenu(3, rowTurbo, sub, Dpi.Px(102));
             };
 
@@ -410,6 +412,113 @@ namespace MediaDownloader
             popup.Closed += (s, e) => selOptions.SetOpenState(false);
             selOptions.SetOpenState(true);
             popup.Show(selOptions, new Point(selOptions.Width - popup.Width, selOptions.Height + Dpi.Px(2)));
+        }
+
+        private void UpdateBrowserCookiesTooltip()
+        {
+            appToolTip.SetToolTip(selBrowserCookies, "Browser Cookies (" + settings.BrowserCookies + ")");
+        }
+
+        private void ShowBrowserCookiesPopup()
+        {
+            int width = Dpi.Px(360);
+            int rowHeight = Dpi.Px(34);
+            int inset = Dpi.Px(12);
+            Panel panel = new Panel
+            {
+                BackColor = Theme.BgSurface,
+                Width = width
+            };
+            panel.Paint += (s, e) =>
+            {
+                using (Pen pen = new Pen(Theme.BorderHover))
+                    e.Graphics.DrawRectangle(pen, 0, 0, panel.Width - Dpi.Px(1), panel.Height - Dpi.Px(1));
+            };
+
+            const string recommendation = "Firefox is recommended.";
+            RichTextBox description = new RichTextBox
+            {
+                Font = Font,
+                BackColor = Theme.BgSurface,
+                ForeColor = Theme.TextSecondary,
+                Location = new Point(inset, inset),
+                Width = width - 2 * inset,
+                BorderStyle = BorderStyle.None,
+                ReadOnly = true,
+                TabStop = false,
+                DetectUrls = false,
+                ScrollBars = RichTextBoxScrollBars.None,
+                Cursor = Cursors.Default
+            };
+            panel.Controls.Add(description);
+            description.ContentsResized += (s, e) => description.Height = e.NewRectangle.Height + Dpi.Px(4);
+            description.Text = "Use cookies from a browser to gain access to a url that requires authentication. Chrome-based " +
+                "browsers (Chrome, Edge, Brave, Opera, Vivaldi, Chromium) are not recommended due to " +
+                "frequent updates that may break cookie access. " + recommendation;
+            description.Select(description.TextLength - recommendation.Length, recommendation.Length);
+            using (Font bold = new Font(Font, FontStyle.Bold))
+                description.SelectionFont = bold;
+            description.Select(0, 0);
+
+            PopupMenuRow selector = new PopupMenuRow("Choose browser", settings.BrowserCookies.ToString(), null, false, "")
+            {
+                Location = new Point(inset, description.Bottom + Dpi.Px(10)),
+                Width = width - 2 * inset,
+                DropdownExpanded = false
+            };
+            int collapsedHeight = selector.Bottom + inset;
+            panel.Height = collapsedHeight;
+            Panel browsers = new Panel
+            {
+                Location = new Point(inset, collapsedHeight),
+                Size = new Size(selector.Width, CookieBrowsers.Length * rowHeight),
+                Visible = false
+            };
+            panel.Controls.Add(selector);
+            panel.Controls.Add(browsers);
+
+            for (int i = 0; i < CookieBrowsers.Length; i++)
+            {
+                CookieBrowser browser = CookieBrowsers[i];
+                string hint = browser == CookieBrowser.Firefox ? "Recommended" : null;
+                PopupMenuRow row = new PopupMenuRow(browser.ToString(), hint, null, browser == settings.BrowserCookies)
+                {
+                    Location = new Point(0, i * rowHeight),
+                    Width = browsers.Width
+                };
+                row.MouseDown += (s, e) =>
+                {
+                    if (e.Button != MouseButtons.Left) return;
+                    settings.BrowserCookies = browser;
+                    settings.Save();
+                    UpdateBrowserCookiesTooltip();
+                    selector.RightBadgeText = browser.ToString();
+                    selector.Invalidate();
+                    SelectSubmenuRow(browsers, row);
+                };
+                browsers.Controls.Add(row);
+            }
+            ToolStripDropDown popup = CreateDarkPopup(panel, selBrowserCookies, alignRight: true);
+            selector.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Left) return;
+                bool expand = !browsers.Visible;
+                browsers.Visible = expand;
+                selector.DropdownExpanded = expand;
+                selector.Invalidate();
+                panel.Height = expand ? browsers.Bottom + inset : collapsedHeight;
+                popup.Items[0].Size = panel.Size;
+                popup.Size = panel.Size;
+            };
+        }
+
+        private static void SelectSubmenuRow(Panel panel, PopupMenuRow selectedRow)
+        {
+            foreach (PopupMenuRow row in panel.Controls)
+            {
+                row.IsSelected = row == selectedRow;
+                row.Invalidate();
+            }
         }
 
         private Panel BuildSubtitlesSubmenuPanel(PopupMenuRow parentRow)
@@ -545,7 +654,7 @@ namespace MediaDownloader
             return container;
         }
 
-        private Panel BuildParallelSubmenuPanel(PopupMenuRow parentRow, Action closeAll)
+        private Panel BuildParallelSubmenuPanel(PopupMenuRow parentRow)
         {
             int width = Dpi.Px(190);
             int rowH = Dpi.Px(46);
@@ -575,20 +684,21 @@ namespace MediaDownloader
                 };
                 row.MouseDown += (s, e) =>
                 {
+                    if (e.Button != MouseButtons.Left) return;
                     settings.ParallelCount = count;
                     settings.Save();
                     parentRow.RightBadgeText = count + (count == 1 ? " Download   ◂" : " Downloads   ◂");
                     parentRow.Invalidate();
                     selOptions.SetValueLabel(GetOptionsSummaryLabel());
+                    SelectSubmenuRow(container, row);
                     ProcessQueue();
-                    if (closeAll != null) closeAll();
                 };
                 container.Controls.Add(row);
             }
             return container;
         }
 
-        private Panel BuildTurboSubmenuPanel(PopupMenuRow parentRow, Action closeAll)
+        private Panel BuildTurboSubmenuPanel(PopupMenuRow parentRow)
         {
             int[] counts = new int[] { 1, 4, 8, 12, 16 };
             string[] titles = new string[]
@@ -635,12 +745,13 @@ namespace MediaDownloader
                 };
                 row.MouseDown += (s, e) =>
                 {
+                    if (e.Button != MouseButtons.Left) return;
                     settings.ConcurrentFragments = fragCount;
                     settings.Save();
                     parentRow.RightBadgeText = fragCount + "x   ◂";
                     parentRow.Invalidate();
                     selOptions.SetValueLabel(GetOptionsSummaryLabel());
-                    if (closeAll != null) closeAll();
+                    SelectSubmenuRow(container, row);
                 };
                 container.Controls.Add(row);
             }

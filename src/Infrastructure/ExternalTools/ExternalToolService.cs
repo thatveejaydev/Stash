@@ -44,7 +44,12 @@ namespace MediaDownloader
             });
         }
 
-        public static async Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl)
+        public static Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl)
+        {
+            return FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, CookieBrowser.None);
+        }
+
+        internal static async Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl, CookieBrowser browser)
         {
             PlaylistInfo info = new PlaylistInfo();
             try
@@ -53,22 +58,26 @@ namespace MediaDownloader
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = ytDlpPath,
-                    Arguments = string.Format(
+                    Arguments = YtDlpCommandBuilder.BuildBrowserCookieArguments(browser) + string.Format(
                         "--flat-playlist --print \"%(playlist_title)s\t%(playlist_count)s\t%(id)s\t%(title)s\t%(url)s\" --no-warnings \"{0}\"",
                         safeUrl),
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
-                    StandardOutputEncoding = Encoding.UTF8
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
 
                 using (Process p = Process.Start(psi))
                 {
-                    Task<string> readTask = p.StandardOutput.ReadToEndAsync();
+                    Task<string[]> readTask = Task.WhenAll(p.StandardOutput.ReadToEndAsync(), p.StandardError.ReadToEndAsync());
                     Task completed = await Task.WhenAny(readTask, Task.Delay(15000));
                     if (completed == readTask)
                     {
-                        string raw = await readTask;
+                        string[] output = await readTask;
+                        string raw = output[0];
+                        info.CookieAccessFailed = DownloadFailure.IsBrowserCookieError(output[1]);
                         if (!string.IsNullOrWhiteSpace(raw))
                         {
                             string[] lines = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -140,6 +149,7 @@ namespace MediaDownloader
 
     public class PlaylistInfo
     {
+        internal bool CookieAccessFailed { get; set; }
         public string Title { get; set; }
         public int Count { get; set; }
         public List<PlaylistEntry> Entries { get; set; }
