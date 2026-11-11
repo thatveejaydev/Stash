@@ -1,16 +1,12 @@
 using System;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace MediaDownloader
 {
     // Modern Dark Dialog to Prompt for Renaming When a Similar Filename Exists
-    public class RenamePromptDialog : Form
+    public class RenamePromptDialog : ThemedForm
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
         private TextBox txtNewName;
         public string ChosenBaseName { get; private set; }
 
@@ -24,7 +20,6 @@ namespace MediaDownloader
             MaximizeBox = false;
             MinimizeBox = false;
             BackColor = Theme.BgTopBar;
-            ForeColor = Theme.TextPrimary;
             Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
             Padding = new Padding(Dpi.Px(18));
 
@@ -32,16 +27,6 @@ namespace MediaDownloader
             {
                 Icon exeIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
                 if (exeIcon != null) Icon = exeIcon;
-            }
-            catch { }
-
-            try
-            {
-                int useDark = 1;
-                if (DwmSetWindowAttribute(Handle, 20, ref useDark, sizeof(int)) != 0)
-                {
-                    DwmSetWindowAttribute(Handle, 19, ref useDark, sizeof(int));
-                }
             }
             catch { }
 

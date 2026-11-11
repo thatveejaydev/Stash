@@ -38,7 +38,7 @@ namespace MediaDownloader
             {
                 using (WebClient wc = new WebClient())
                 {
-                    wc.Headers.Add("User-Agent", "Stash-Windows-Downloader/2.5");
+                    wc.Headers.Add("User-Agent", "Stash-Windows-Downloader/" + UpdateService.InstalledVersion);
                     wc.DownloadFile(url, destinationPath);
                 }
             });
@@ -71,13 +71,23 @@ namespace MediaDownloader
 
                 using (Process p = Process.Start(psi))
                 {
+                    const int timeoutMilliseconds = 15000;
+                    Stopwatch elapsed = Stopwatch.StartNew();
                     Task<string[]> readTask = Task.WhenAll(p.StandardOutput.ReadToEndAsync(), p.StandardError.ReadToEndAsync());
-                    Task completed = await Task.WhenAny(readTask, Task.Delay(15000));
+                    Task completed = await Task.WhenAny(readTask, Task.Delay(timeoutMilliseconds));
                     if (completed == readTask)
                     {
                         string[] output = await readTask;
                         string raw = output[0];
                         info.CookieAccessFailed = DownloadFailure.IsBrowserCookieError(output[1]);
+                        int remaining = Math.Max(0, timeoutMilliseconds - (int)elapsed.ElapsedMilliseconds);
+                        if (!await Task.Run(() => p.WaitForExit(remaining)))
+                        {
+                            KillProcessTree(p.Id);
+                            return info;
+                        }
+                        if (p.ExitCode != 0) return info;
+
                         if (!string.IsNullOrWhiteSpace(raw))
                         {
                             string[] lines = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);

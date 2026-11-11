@@ -9,7 +9,7 @@ using System.Windows.Forms;
 
 namespace MediaDownloader
 {
-    public partial class MainForm : Form
+    public partial class MainForm
     {
         private void PasteFromClipboardAndDownload()
         {

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -15,15 +14,21 @@ namespace MediaDownloader
         CustomRange
     }
 
-    public class PlaylistPromptDialog : Form
+    public class PlaylistPromptDialog : ThemedForm
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
         private readonly string playlistUrl;
         private readonly string ytDlpPath;
         private readonly CookieBrowser browserCookies;
         private PlaylistInfo playlistInfo;
+        private int ReadyVideoCount
+        {
+            get
+            {
+                if (playlistInfo == null || playlistInfo.CookieAccessFailed ||
+                    playlistInfo.Entries.Count != playlistInfo.Count) return 0;
+                return playlistInfo.Entries.Count;
+            }
+        }
 
         private readonly bool hasSingleVideo;
         private readonly string singleVideoUrl;
@@ -65,7 +70,7 @@ namespace MediaDownloader
             hasSingleVideo = DownloadUrlValidator.TryExtractSingleVideoUrl(url, out singleVideoUrl, out singleVideoId);
             selectedChoice = PlaylistDownloadChoice.EntirePlaylist;
 
-            Text = "Stash \u2014 Playlist Detected";
+            Text = "Playlist Detected";
             AutoScaleMode = AutoScaleMode.None;
             ClientSize = new Size(Dpi.Px(680), Dpi.Px(385));
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -73,23 +78,12 @@ namespace MediaDownloader
             MaximizeBox = false;
             MinimizeBox = false;
             BackColor = Theme.BgTopBar;
-            ForeColor = Theme.TextPrimary;
             Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
 
             try
             {
                 Icon exeIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
                 if (exeIcon != null) Icon = exeIcon;
-            }
-            catch { }
-
-            try
-            {
-                int useDark = 1;
-                if (DwmSetWindowAttribute(Handle, 20, ref useDark, sizeof(int)) != 0)
-                {
-                    DwmSetWindowAttribute(Handle, 19, ref useDark, sizeof(int));
-                }
             }
             catch { }
 
@@ -219,7 +213,6 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(46), Dpi.Px(1)),
                 Size = new Size(Dpi.Px(68), Dpi.Px(32))
             };
-            stepperFrom.Value = 1;
             stepperFrom.ValueChanged += (s, e) => UpdateRangeFeedback();
             stepperFrom.InputEntered += (s, e) => SelectCard(PlaylistDownloadChoice.CustomRange, false);
             stepperFrom.EnterPressed += (s, e) =>
@@ -246,7 +239,6 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(154), Dpi.Px(1)),
                 Size = new Size(Dpi.Px(68), Dpi.Px(32))
             };
-            stepperTo.Value = 15;
             stepperTo.ValueChanged += (s, e) => UpdateRangeFeedback();
             stepperTo.InputEntered += (s, e) => SelectCard(PlaylistDownloadChoice.CustomRange, false);
             stepperTo.EnterPressed += (s, e) =>
@@ -331,7 +323,7 @@ namespace MediaDownloader
                 BaseColor = Theme.BrandPurple,
                 HoverColor = Theme.BrandPurpleHover,
                 Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
-                Enabled = hasSingleVideo
+                Enabled = false
             };
             btnQueue.Click += BtnQueue_Click;
             Controls.Add(btnQueue);
@@ -370,9 +362,7 @@ namespace MediaDownloader
 
             int fromVal = stepperFrom.Value;
             int toVal = stepperTo.Value;
-            int totalCount = (playlistInfo != null && playlistInfo.Entries.Count > 0)
-                ? playlistInfo.Entries.Count
-                : (stepperTo.MaxValue > 0 && stepperTo.MaxValue < 9999 ? stepperTo.MaxValue : 0);
+            int totalCount = ReadyVideoCount;
 
             if (totalCount > 0)
             {
@@ -388,7 +378,11 @@ namespace MediaDownloader
             int hintRight = lblRangeHint.Visible ? lblRangeHint.Right : stepperTo.Right;
             lblRangeCount.Location = new Point(hintRight + Dpi.Px(14), Dpi.Px(6));
 
-            if (fromVal < 1)
+            if (fromVal == 0 && toVal == 0)
+            {
+                lblRangeCount.Text = "";
+            }
+            else if (fromVal < 1)
             {
                 lblRangeCount.Text = "(Must start \u2265 1)";
                 lblRangeCount.ForeColor = Theme.AccentWarning;
@@ -416,51 +410,33 @@ namespace MediaDownloader
         private void UpdateQueueButtonText()
         {
             if (btnQueue == null) return;
-            if (playlistInfo != null && playlistInfo.CookieAccessFailed && playlistInfo.Entries.Count == 0)
-            {
-                btnQueue.Enabled = false;
-                return;
-            }
-
-            int totalCount = (playlistInfo != null && playlistInfo.Entries.Count > 0) ? playlistInfo.Entries.Count : 0;
+            int totalCount = ReadyVideoCount;
+            bool canQueue = totalCount > 0;
 
             if (selectedChoice == PlaylistDownloadChoice.EntirePlaylist)
             {
                 btnQueue.Text = totalCount > 0
                     ? string.Format("Queue Entire Playlist ({0})", totalCount)
                     : "Queue Entire Playlist";
-                btnQueue.Enabled = totalCount > 0 || playlistInfo != null;
             }
             else if (selectedChoice == PlaylistDownloadChoice.SingleVideoOnly)
             {
                 btnQueue.Text = "Queue Single Video";
-                btnQueue.Enabled = true;
             }
             else // CustomRange
             {
-                if (stepperFrom != null && stepperTo != null)
+                int fromVal = stepperFrom.Value;
+                int toVal = stepperTo.Value;
+                canQueue = canQueue && fromVal >= 1 && fromVal <= toVal && toVal <= totalCount;
+                btnQueue.Text = "Queue Range";
+                if (canQueue)
                 {
-                    int fromVal = stepperFrom.Value;
-                    int toVal = stepperTo.Value;
-
-                    if (fromVal <= toVal && fromVal >= 1)
-                    {
-                        int count = toVal - fromVal + 1;
-                        btnQueue.Text = string.Format("Queue {0} {1}", count, count == 1 ? "Video" : "Videos");
-                        btnQueue.Enabled = true;
-                    }
-                    else
-                    {
-                        btnQueue.Text = "Invalid Range";
-                        btnQueue.Enabled = false;
-                    }
-                }
-                else
-                {
-                    btnQueue.Text = "Queue Range";
-                    btnQueue.Enabled = false;
+                    int count = toVal - fromVal + 1;
+                    btnQueue.Text = string.Format("Queue {0} {1}", count, count == 1 ? "Video" : "Videos");
                 }
             }
+
+            btnQueue.Enabled = canQueue;
         }
 
         private async void LoadPlaylistInfoAsync()
@@ -468,9 +444,9 @@ namespace MediaDownloader
             playlistInfo = await ExternalToolService.FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, browserCookies);
             if (IsDisposed) return;
 
-            if (playlistInfo != null && playlistInfo.Entries.Count > 0)
+            int count = ReadyVideoCount;
+            if (count > 0)
             {
-                int count = playlistInfo.Count;
                 string title = !string.IsNullOrEmpty(playlistInfo.Title) ? playlistInfo.Title : "Playlist";
                 lblPlaylistInfo.Text = string.Format("{0}  \u2022  {1} videos", title, count);
 
@@ -496,17 +472,11 @@ namespace MediaDownloader
                 }
                 cardSingle.BadgeText = "1 video";
 
-                stepperFrom.MinValue = 1;
                 stepperFrom.MaxValue = count;
-                stepperTo.MinValue = 1;
                 stepperTo.MaxValue = count;
-
-                stepperFrom.Value = 1;
-                stepperTo.Value = Math.Min(15, count);
 
                 lblStatus.Text = string.Format("\u25CF {0} videos ready", count);
                 lblStatus.ForeColor = Theme.AccentSuccess;
-                btnQueue.Enabled = true;
             }
             else if (playlistInfo != null && playlistInfo.CookieAccessFailed)
             {
@@ -517,13 +487,11 @@ namespace MediaDownloader
             else
             {
                 lblPlaylistInfo.Text = "Could not retrieve full video list.";
-                lblStatus.Text = "\u25CF Playlist items ready";
-                lblStatus.ForeColor = Theme.TextMuted;
-                btnQueue.Enabled = true;
+                lblStatus.Text = "\u25CF Playlist unavailable";
+                lblStatus.ForeColor = Theme.AccentWarning;
             }
 
             UpdateRangeFeedback();
-            UpdateQueueButtonText();
 
             cardEntire.Invalidate();
             cardSingle.Invalidate();
@@ -532,23 +500,17 @@ namespace MediaDownloader
 
         private void BtnQueue_Click(object sender, EventArgs e)
         {
+            if (!btnQueue.Enabled) return;
+
             ResultUrls = new List<string>();
             ResultTitles = new List<string>();
 
             if (selectedChoice == PlaylistDownloadChoice.EntirePlaylist)
             {
-                if (playlistInfo != null && playlistInfo.Entries.Count > 0)
+                foreach (PlaylistEntry entry in playlistInfo.Entries)
                 {
-                    foreach (PlaylistEntry entry in playlistInfo.Entries)
-                    {
-                        ResultUrls.Add(entry.Url);
-                        ResultTitles.Add(entry.Title);
-                    }
-                }
-                else
-                {
-                    ResultUrls.Add(playlistUrl);
-                    ResultTitles.Add(null);
+                    ResultUrls.Add(entry.Url);
+                    ResultTitles.Add(entry.Title);
                 }
             }
             else if (selectedChoice == PlaylistDownloadChoice.SingleVideoOnly)
@@ -556,55 +518,21 @@ namespace MediaDownloader
                 if (hasSingleVideo && !string.IsNullOrEmpty(singleVideoUrl))
                 {
                     ResultUrls.Add(singleVideoUrl);
-                    string title = null;
-                    if (playlistInfo != null)
-                    {
-                        foreach (PlaylistEntry entry in playlistInfo.Entries)
-                        {
-                            if (entry.Id == singleVideoId)
-                            {
-                                title = entry.Title;
-                                break;
-                            }
-                        }
-                    }
-                    ResultTitles.Add(title);
+                    PlaylistEntry entry = playlistInfo.Entries.Find(video => video.Id == singleVideoId);
+                    ResultTitles.Add(entry == null ? null : entry.Title);
                 }
-                else if (playlistInfo != null && playlistInfo.Entries.Count > 0)
+                else
                 {
                     ResultUrls.Add(playlistInfo.Entries[0].Url);
                     ResultTitles.Add(playlistInfo.Entries[0].Title);
                 }
-                else
-                {
-                    ResultUrls.Add(playlistUrl);
-                    ResultTitles.Add(null);
-                }
             }
             else // CustomRange
             {
-                int fromVal = stepperFrom.Value;
-                int toVal = stepperTo.Value;
-
-                int max = (playlistInfo != null && playlistInfo.Entries.Count > 0) ? playlistInfo.Entries.Count : 9999;
-                if (fromVal < 1) fromVal = 1;
-                if (toVal < fromVal) toVal = fromVal;
-                if (toVal > max) toVal = max;
-
-                if (playlistInfo != null && playlistInfo.Entries.Count > 0)
+                for (int i = stepperFrom.Value - 1; i < stepperTo.Value; i++)
                 {
-                    int startIdx = Math.Max(0, fromVal - 1);
-                    int endIdx = Math.Min(playlistInfo.Entries.Count - 1, toVal - 1);
-                    for (int i = startIdx; i <= endIdx; i++)
-                    {
-                        ResultUrls.Add(playlistInfo.Entries[i].Url);
-                        ResultTitles.Add(playlistInfo.Entries[i].Title);
-                    }
-                }
-                else
-                {
-                    ResultUrls.Add(playlistUrl);
-                    ResultTitles.Add(null);
+                    ResultUrls.Add(playlistInfo.Entries[i].Url);
+                    ResultTitles.Add(playlistInfo.Entries[i].Title);
                 }
             }
 
@@ -620,7 +548,7 @@ namespace MediaDownloader
         private bool isFocused;
         private bool hoverUp;
         private bool hoverDown;
-        private int minValue = 1;
+        private const int MinValue = 0;
         private int maxValue = 9999;
 
         public event EventHandler ValueChanged;
@@ -635,19 +563,13 @@ namespace MediaDownloader
             {
                 int val;
                 if (int.TryParse(textBox.Text.Trim(), out val)) return val;
-                return minValue;
+                return MinValue;
             }
             set
             {
-                int clamped = Math.Max(minValue, Math.Min(maxValue, value));
+                int clamped = Math.Max(MinValue, Math.Min(maxValue, value));
                 textBox.Text = clamped.ToString();
             }
-        }
-
-        public int MinValue
-        {
-            get { return minValue; }
-            set { minValue = value; }
         }
 
         public int MaxValue
@@ -670,7 +592,7 @@ namespace MediaDownloader
                 ForeColor = Theme.TextPrimary,
                 Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
                 TextAlign = HorizontalAlignment.Center,
-                Text = "1"
+                Text = MinValue.ToString()
             };
 
             PositionTextBox();
@@ -760,7 +682,7 @@ namespace MediaDownloader
         public void Decrement()
         {
             int current = Value;
-            if (current > minValue)
+            if (current > MinValue)
             {
                 Value = current - 1;
             }

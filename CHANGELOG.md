@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.6
+
+### Improvements & Fixes
+- **Window Opening:** Buffered painting helps prevent a brief white flash when opening Stash and its dialogs.
+- **Playlist Detected:** Custom range fields start at 0. Queue becomes available after the full playlist loads, and custom ranges must be valid. The dialog title now reads **Playlist Detected**.
+
 ## v0.2.5
 
 ### New Features

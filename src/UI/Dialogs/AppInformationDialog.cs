@@ -1,19 +1,13 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace MediaDownloader
 {
-    public sealed class AppInformationDialog : Form
+    public sealed class AppInformationDialog : ThemedForm
     {
-        private const int WsExComposited = 0x02000000;
-        private const int DwmTransitionsForceDisabled = 3;
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr handle, int attribute, ref int value, int size);
         public UpdateInfo SelectedUpdate { get; private set; }
 
         public AppInformationDialog(UpdateService service) : this(service.CheckAsync) { }
@@ -26,7 +20,6 @@ namespace MediaDownloader
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
-            BackColor = Theme.BgWindow; ForeColor = Theme.TextPrimary;
             Font = new Font("Segoe UI", 9.5F);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
@@ -114,32 +107,6 @@ namespace MediaDownloader
                 BaseColor = primary ? Theme.BrandPurple : Theme.BgTopBar,
                 HoverColor = primary ? Theme.BrandPurpleHover : Theme.BgSurfaceHover,
                 BorderColor = primary ? Color.Empty : Theme.BorderSubtle };
-        }
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                CreateParams parameters = base.CreateParams;
-                // Present the dialog and its child controls in one buffered paint.
-                parameters.ExStyle |= WsExComposited;
-                return parameters;
-            }
-        }
-
-        protected override void OnHandleCreated(EventArgs e)
-        {
-            base.OnHandleCreated(e);
-            try
-            {
-                int disableTransitions = 1;
-                DwmSetWindowAttribute(Handle, DwmTransitionsForceDisabled, ref disableTransitions, sizeof(int));
-                int dark = 1;
-                if (DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int)) != 0)
-                    DwmSetWindowAttribute(Handle, 19, ref dark, sizeof(int));
-            }
-            catch (DllNotFoundException) { }
-            catch (EntryPointNotFoundException) { }
         }
     }
 }

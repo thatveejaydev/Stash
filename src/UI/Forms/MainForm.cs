@@ -3,16 +3,12 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Net;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace MediaDownloader
 {
-    public partial class MainForm : Form
+    public partial class MainForm : ThemedForm
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
         private AppSettings settings;
 
         // Top Flow Controls
@@ -136,7 +132,6 @@ namespace MediaDownloader
             downloadManager.ErrorLog += logWriter.WriteError;
             noticeTimer.Tick += (sender, args) => { noticeTimer.Stop(); notice.Visible = false; };
             FitInitialWindowToScreen();
-            ApplyDarkTitleBar();
             CheckToolsStatus();
             Shown += (sender, args) => updateService.CleanupStaleFiles();
         }
@@ -149,26 +144,6 @@ namespace MediaDownloader
             MinimumSize = new Size(Math.Min(MinimumSize.Width, availableWidth),
                                    Math.Min(MinimumSize.Height, availableHeight));
             Size = new Size(Math.Min(Width, availableWidth), Math.Min(Height, availableHeight));
-        }
-
-        private void ApplyDarkTitleBar()
-        {
-            try
-            {
-                Icon exeIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-                if (exeIcon != null) Icon = exeIcon;
-            }
-            catch { }
-
-            try
-            {
-                int useDark = 1;
-                if (DwmSetWindowAttribute(Handle, 20, ref useDark, sizeof(int)) != 0)
-                {
-                    DwmSetWindowAttribute(Handle, 19, ref useDark, sizeof(int));
-                }
-            }
-            catch { }
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
@@ -234,8 +209,6 @@ namespace MediaDownloader
             MinimumSize = new Size(Dpi.Px(880), Dpi.Px(520));
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
-            BackColor = Theme.BgWindow;
-            ForeColor = Theme.TextPrimary;
             ShowIcon = true;
             try
             {

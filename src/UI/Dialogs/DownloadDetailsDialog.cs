@@ -5,18 +5,14 @@ using System.Windows.Forms;
 
 namespace MediaDownloader
 {
-    internal sealed class DownloadDetailsDialog : Form
+    internal sealed class DownloadDetailsDialog : ThemedForm
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr handle, int attribute, ref int value, int size);
         private readonly Timer feedback = new Timer { Interval = 2500 };
 
         public DownloadDetailsDialog(DownloadFailure failure)
         {
             Text = "Download details";
             AutoScaleMode = AutoScaleMode.None;
-            BackColor = Theme.BgWindow;
-            ForeColor = Theme.TextPrimary;
             Font = new Font("Segoe UI", 9.5F);
             ClientSize = new Size(Dpi.Px(620), Dpi.Px(340));
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -86,7 +82,8 @@ namespace MediaDownloader
                 feedback.Stop(); feedback.Start();
             };
             feedback.Tick += (s, e) => { feedback.Stop(); copy.Text = "Copy details"; };
-            Shown += (s, e) => { fit(); close.Focus(); };
+            Load += (s, e) => fit();
+            Shown += (s, e) => close.Focus();
             AcceptButton = close; CancelButton = close;
         }
 
@@ -98,18 +95,6 @@ namespace MediaDownloader
         private static ModernButton CreateButton(string text, int width, bool primary)
         {
             return new ModernButton { Text = text, Size = new Size(Dpi.Px(width), Dpi.Px(34)), Font = new Font("Segoe UI Semibold", 9F), CornerRadius = Dpi.Px(8), BaseColor = primary ? Theme.BrandPurple : Theme.BgTopBar, HoverColor = primary ? Theme.BrandPurpleHover : Theme.BgSurfaceHover, BorderColor = primary ? Color.Empty : Theme.BorderSubtle };
-        }
-
-        protected override void OnHandleCreated(EventArgs e)
-        {
-            base.OnHandleCreated(e);
-            try
-            {
-                int dark = 1;
-                if (DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int)) != 0) DwmSetWindowAttribute(Handle, 19, ref dark, sizeof(int));
-            }
-            catch (DllNotFoundException) { }
-            catch (EntryPointNotFoundException) { }
         }
 
         protected override void Dispose(bool disposing)
