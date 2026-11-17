@@ -4,115 +4,85 @@ using System.Windows.Forms;
 
 namespace Stash
 {
-    // Modern Dark Dialog to Prompt for Renaming When a Similar Filename Exists
+    // Asked before a download would create a file with the same name as an existing one.
     public class RenamePromptDialog : ThemedForm
     {
-        private TextBox txtNewName;
+        private readonly TextBox txtNewName;
         public string ChosenBaseName { get; private set; }
 
         public RenamePromptDialog(string existingFileName, string suggestedNewBaseName, string extension)
         {
-            Text = "Stash";
+            Text = "File already exists";
             AutoScaleMode = AutoScaleMode.None;
-            ClientSize = new Size(Dpi.Px(690), Dpi.Px(354));
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            BackColor = Theme.BgTopBar;
-            Font = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
-            Padding = new Padding(Dpi.Px(18));
+            MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+            Font = Theme.GetFont("Segoe UI", 9.5F);
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            catch (Exception ex) { AppLog.Error("Could not load the dialog icon", ex); }
 
-            try
-            {
-                Icon exeIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-                if (exeIcon != null) Icon = exeIcon;
-            }
-            catch { }
+            int width = Dpi.Px(560);
+            int inset = Dpi.Px(24);
+            int contentWidth = width - inset * 2;
 
-            Label lblTitle = new Label
+            Label title = Theme.CreateDialogTitle("A file with this name already exists");
+            title.Location = new Point(inset, Dpi.Px(20));
+            Label body = Theme.CreateDialogText("Save the new download under a different name, or cancel it.", contentWidth);
+            body.Location = new Point(inset, Dpi.Px(52));
+
+            CardPanel existing = new CardPanel
             {
-                Text = "File already exists",
-                Location = new Point(Dpi.Px(72), Dpi.Px(22)),
-                AutoSize = true,
-                Font = Theme.GetFont("Segoe UI Semibold", 11F, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary
+                Location = new Point(inset, Dpi.Px(86)), Size = new Size(contentWidth, Dpi.Px(56)),
+                CardFillColor = Theme.BgSurface, CardBorderColor = Theme.BorderSubtle, CornerRadius = Dpi.Px(10)
             };
-
-            Label lblExisting = new Label
+            existing.Controls.Add(new Label
             {
-                Text = existingFileName,
-                Location = new Point(Dpi.Px(12), Dpi.Px(37)),
-                Size = new Size(Dpi.Px(626), Dpi.Px(22)),
-                AutoEllipsis = true,
-                Font = Theme.GetFont("Segoe UI", 9F),
-                ForeColor = Theme.TextPrimary,
-                BackColor = Theme.BgSurface,
-                UseMnemonic = false
-            };
-
-            Label lblPrompt = new Label
+                Text = "Existing file", Location = new Point(Dpi.Px(14), Dpi.Px(8)), AutoSize = true,
+                Font = Theme.GetFont("Segoe UI", 8.5F), ForeColor = Theme.TextMuted, BackColor = Theme.BgSurface
+            });
+            existing.Controls.Add(new Label
             {
-                Text = "Save as",
-                Location = new Point(Dpi.Px(20), Dpi.Px(168)),
-                AutoSize = true,
-                ForeColor = Theme.TextPrimary,
-                Font = Theme.GetFont("Segoe UI Semibold", 9.5F, FontStyle.Bold)
-            };
+                Text = existingFileName, Location = new Point(Dpi.Px(14), Dpi.Px(27)), Size = new Size(contentWidth - Dpi.Px(28), Dpi.Px(20)),
+                AutoEllipsis = true, Font = Theme.GetFont("Segoe UI", 9.5F), ForeColor = Theme.TextPrimary, BackColor = Theme.BgSurface, UseMnemonic = false
+            });
 
-            CardPanel pnlInput = new CardPanel
+            Label saveAs = new Label
             {
-                Location = new Point(Dpi.Px(20), Dpi.Px(194)),
-                Size = new Size(Dpi.Px(650), Dpi.Px(42)),
-                Padding = new Padding(Dpi.Px(12), Dpi.Px(11), Dpi.Px(12), Dpi.Px(8)),
-                CardFillColor = Theme.BgInput,
-                CardBorderColor = Theme.BorderFocus,
-                CornerRadius = Dpi.Px(8)
+                Text = "Save as", Location = new Point(inset, Dpi.Px(158)), AutoSize = true,
+                Font = Theme.GetFont("Segoe UI Semibold", 9.5F), ForeColor = Theme.TextPrimary
             };
-
+            CardPanel inputCard = new CardPanel
+            {
+                Location = new Point(inset, Dpi.Px(182)), Size = new Size(contentWidth, Dpi.Px(40)),
+                Padding = new Padding(Dpi.Px(12), Dpi.Px(10), Dpi.Px(12), Dpi.Px(6)),
+                CardFillColor = Theme.BgInput, CardBorderColor = Theme.BorderFocus, CornerRadius = Dpi.Px(10)
+            };
             txtNewName = new TextBox
             {
-                Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.None,
-                BackColor = Theme.BgInput,
-                ForeColor = Theme.TextPrimary,
-                Font = Theme.GetFont("Segoe UI", 10F),
-                Text = suggestedNewBaseName,
-                AccessibleName = "Save as filename"
+                Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Theme.BgInput, ForeColor = Theme.TextPrimary,
+                Font = Theme.GetFont("Segoe UI", 10F), Text = suggestedNewBaseName, AccessibleName = "New file name"
             };
-            pnlInput.Controls.Add(txtNewName);
-
-            ModernButton btnCancel = new ModernButton
+            inputCard.Controls.Add(txtNewName);
+            Label note = Theme.CreateDialogText(extension + " is added automatically.", contentWidth);
+            note.ForeColor = Theme.TextMuted;
+            note.Font = Theme.GetFont("Segoe UI", 8.5F);
+            note.Location = new Point(inset, Dpi.Px(228));
+            Label error = new Label
             {
-                Text = "Cancel",
-                Location = new Point(Dpi.Px(451), Dpi.Px(301)),
-                Size = new Size(Dpi.Px(70), Dpi.Px(40)),
-                BaseColor = Theme.BgSurface,
-                HoverColor = Theme.BgSurfaceHover,
-                BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary,
-                Font = Theme.GetFont("Segoe UI", 9F)
-            };
-            btnCancel.Click += (s, e) =>
-            {
-                DialogResult = DialogResult.Cancel;
-                Close();
+                AutoSize = true, Location = new Point(inset, Dpi.Px(228)), ForeColor = Theme.DangerText,
+                Font = Theme.GetFont("Segoe UI", 8.5F), Visible = false, Text = "Enter a file name."
             };
 
-            ModernButton btnSave = new ModernButton
-            {
-                Text = "Save as New File",
-                Location = new Point(Dpi.Px(529), Dpi.Px(301)),
-                Size = new Size(Dpi.Px(141), Dpi.Px(40)),
-                BaseColor = Theme.BrandPurple,
-                HoverColor = Theme.BrandPurpleHover,
-                Font = Theme.GetFont("Segoe UI Semibold", 9F, FontStyle.Bold)
-            };
-            btnSave.Click += (s, e) =>
+            ModernButton cancel = Theme.CreateButton("Cancel", false, 80);
+            cancel.DialogResult = DialogResult.Cancel;
+            ModernButton save = Theme.CreateButton("Save as new file", true, 130);
+            save.Click += (s, e) =>
             {
                 string cleaned = SanitizeFileName(txtNewName.Text.Trim());
                 if (string.IsNullOrEmpty(cleaned))
                 {
+                    note.Visible = false;
+                    error.Visible = true;
                     txtNewName.Focus();
                     return;
                 }
@@ -120,56 +90,14 @@ namespace Stash
                 DialogResult = DialogResult.OK;
                 Close();
             };
+            txtNewName.TextChanged += (s, e) => { error.Visible = false; note.Visible = true; };
 
-            Panel warning = new Panel { Location = new Point(Dpi.Px(20), Dpi.Px(20)), Size = new Size(Dpi.Px(40), Dpi.Px(40)) };
-            warning.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                using (var path = Theme.CreateRoundedRectangle(new Rectangle(0, 0, Dpi.Px(39), Dpi.Px(39)), 11))
-                using (var fill = new SolidBrush(Color.FromArgb(62, 48, 27)))
-                using (var icon = new Pen(Theme.AccentWarning, 1.5f))
-                {
-                    e.Graphics.FillPath(fill, path);
-                    e.Graphics.DrawLines(icon, new Point[] { new Point(Dpi.Px(14), Dpi.Px(12)), new Point(Dpi.Px(23), Dpi.Px(12)), new Point(Dpi.Px(27), Dpi.Px(16)), new Point(Dpi.Px(27), Dpi.Px(28)), new Point(Dpi.Px(14), Dpi.Px(28)), new Point(Dpi.Px(14), Dpi.Px(12)) });
-                    e.Graphics.DrawLine(icon, Dpi.Px(20), Dpi.Px(17), Dpi.Px(20), Dpi.Px(22));
-                    e.Graphics.DrawEllipse(icon, Dpi.Px(19.5f), Dpi.Px(25), Dpi.Px(1), Dpi.Px(1));
-                }
-            };
-            Controls.Add(warning);
-            Controls.Add(lblTitle);
-            Controls.Add(new Label
-            {
-                Text = "A file with a similar name was found in your download folder.",
-                Location = new Point(Dpi.Px(72), Dpi.Px(48)), Size = new Size(Dpi.Px(590), Dpi.Px(22)),
-                ForeColor = Theme.TextSecondary, Font = Theme.GetFont("Segoe UI", 9F)
-            });
-            CardPanel existing = new CardPanel
-            {
-                Location = new Point(Dpi.Px(20), Dpi.Px(82)), Size = new Size(Dpi.Px(650), Dpi.Px(70)),
-                CardFillColor = Theme.BgSurface, CardBorderColor = Color.Empty, CornerRadius = Dpi.Px(12)
-            };
-            existing.Controls.Add(new Label
-            {
-                Text = "EXISTING FILE", Location = new Point(Dpi.Px(12), Dpi.Px(12)), Size = new Size(Dpi.Px(620), Dpi.Px(18)),
-                Font = Theme.GetFont("Segoe UI", 8F), ForeColor = Theme.TextSecondary, BackColor = Theme.BgSurface
-            });
-            existing.Controls.Add(lblExisting);
-            Controls.Add(existing);
-            Controls.Add(new Label
-            {
-                Text = "The " + extension + " extension will be added automatically.",
-                Location = new Point(Dpi.Px(20), Dpi.Px(242)), Size = new Size(Dpi.Px(650), Dpi.Px(22)),
-                ForeColor = Theme.TextMuted, Font = Theme.GetFont("Segoe UI", 8.5F)
-            });
-            Controls.Add(new Panel { Location = new Point(Dpi.Px(20), Dpi.Px(278)), Size = new Size(Dpi.Px(650), Dpi.Px(1)), BackColor = Theme.BorderSubtle });
-            Controls.Add(lblPrompt);
-            Controls.Add(pnlInput);
-            Controls.Add(btnCancel);
-            Controls.Add(btnSave);
-
-            AcceptButton = btnSave;
-            CancelButton = btnCancel;
-
+            Controls.Add(title); Controls.Add(body); Controls.Add(existing); Controls.Add(saveAs);
+            Controls.Add(inputCard); Controls.Add(note); Controls.Add(error);
+            Controls.Add(Theme.CreateDialogFooter(cancel, save));
+            ClientSize = new Size(width, Dpi.Px(262) + Dpi.Px(62));
+            AcceptButton = save;
+            CancelButton = cancel;
             Shown += (s, e) =>
             {
                 txtNewName.Focus();

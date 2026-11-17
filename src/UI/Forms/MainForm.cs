@@ -11,109 +11,59 @@ namespace Stash
     {
         private AppSettings settings;
 
-        // Top Flow Controls
-        private PasteLinkHeroButton btnPasteHero;
-        private CompactToggleSwitch toggleSmartMode;
-        private InlineFlowSelector selDownloadFormat;
-        private InlineFlowSelector selQuality;
-        private InlineFlowSelector selSaveTo;
-        private InlineFlowSelector selOptions;
-        private InlineFlowSelector selBrowserCookies;
+        // Header, queue and footer
+        private LinkInputBar linkBar;
+        private QueueListControl queueListView;
+        private Label lblToolsStatus;
+        private Label lblQueueSummary;
+        private IconButton btnCookies;
+        private IconButton btnInformation;
+        private Label notice;
+        private ToolTip appToolTip;
 
-        // Queue & Status Bar Controls
-        private ModernButton btnCancelSelected;
-        private ModernButton btnRemoveFinished;
-        private ModernButton btnPauseAll;
         private readonly QueueStore queueStore = new QueueStore(AppPaths.Current.QueuePath);
         private readonly TaskbarProgress taskbar = new TaskbarProgress();
         private readonly System.Threading.CancellationTokenSource engineCancellation = new System.Threading.CancellationTokenSource();
+        private readonly RecentLogWriter logWriter = new RecentLogWriter(Path.Combine(AppPaths.Current.DataDirectory, "logs"));
         private NotifyIcon trayIcon;
         private bool queueWasBusy;
         private bool clipboardListening;
         private string ignoreClipboardText;
         private string lastClipboardText;
         private bool engineOperationRunning;
-        private ModernButton btnInformation;
-        private readonly RecentLogWriter logWriter = new RecentLogWriter(Path.Combine(AppPaths.Current.DataDirectory, "logs"));
-        private Label lblToolsStatus;
-        private Label lblQueueStats;
-        private QueueListControl queueListView;
-
-
-        private ToolTip appToolTip;
 
         private DownloadManager downloadManager;
         private bool shutdownComplete;
         private readonly Timer progressRefreshTimer = new Timer { Interval = 200 };
         private bool progressRefreshPending;
         private readonly Timer noticeTimer = new Timer { Interval = 5000 };
-        private Label notice;
 
         private string binFolder;
         private string ytDlpPath;
         private string ffmpegPath;
 
-        private static readonly string[] FormatShortNames = new string[]
+        // Short names used in the preset chip ("MP4 · Best · Downloads").
+        private static readonly string[] FormatShortNames = { "MP4", "MKV", "MP3", "M4A", "FLAC", "WAV" };
+        private static readonly string[] QualityShortNames = { "Best", "4K", "1440p", "1080p", "720p", "480p", "360p" };
+
+        private static readonly string[] FormatPopupTitles =
         {
-            "Video",
-            "Video (MKV)",
-            "Audio (MP3)",
-            "Audio (M4A)",
-            "Audio (FLAC)",
-            "Audio (WAV)"
+            "Video (MP4)", "Video (MKV)", "Audio (MP3)", "Audio (M4A)", "Audio (FLAC)", "Audio (WAV)"
         };
 
-        private static readonly string[] FormatPopupTitles = new string[]
+        private static readonly string[] FormatPopupRightTags =
         {
-            "Video (MP4)",
-            "Video (MKV)",
-            "Audio (MP3)",
-            "Audio (M4A)",
-            "Audio (FLAC)",
-            "Audio (WAV)"
+            "Best compatibility", "Best source quality", "320 kbps", "Original AAC", "Lossless", "16-bit PCM"
         };
 
-        private static readonly string[] FormatPopupRightTags = new string[]
+        private static readonly string[] QualityPopupTitles =
         {
-            "Best Compatibility",
-            "Best Source Quality",
-            "320 kbps",
-            "Original AAC",
-            "Lossless Audio",
-            "16-bit PCM"
+            "Best available", "4K UHD", "2K QHD", "Full HD", "HD", "SD", "Data saver"
         };
 
-        private static readonly string[] QualityShortNames = new string[]
+        private static readonly string[] QualityPopupRightTags =
         {
-            "Best",
-            "4K (2160p)",
-            "2K (1440p)",
-            "1080p",
-            "720p",
-            "480p",
-            "360p"
-        };
-
-        private static readonly string[] QualityPopupTitles = new string[]
-        {
-            "Best",
-            "4K UHD",
-            "2K QHD",
-            "Full HD",
-            "HD",
-            "SD",
-            "Data Saver"
-        };
-
-        private static readonly string[] QualityPopupRightTags = new string[]
-        {
-            "Max Source Quality",
-            "2160p",
-            "1440p",
-            "1080p",
-            "720p",
-            "480p",
-            "360p"
+            "Highest", "2160p", "1440p", "1080p", "720p", "480p", "360p"
         };
 
         public MainForm()
@@ -208,9 +158,16 @@ namespace Stash
         private void EnableLinkDrop(Control control)
         {
             control.AllowDrop = true;
-            control.DragEnter += (s, e) => e.Effect = ReadDroppedText(e.Data) != null ? DragDropEffects.Copy | DragDropEffects.Link : DragDropEffects.None;
+            control.DragEnter += (s, e) =>
+            {
+                bool valid = ReadDroppedText(e.Data) != null;
+                e.Effect = valid ? DragDropEffects.Copy | DragDropEffects.Link : DragDropEffects.None;
+                queueListView.DropHighlight = valid;
+            };
+            control.DragLeave += (s, e) => queueListView.DropHighlight = false;
             control.DragDrop += (s, e) =>
             {
+                queueListView.DropHighlight = false;
                 string text = ReadDroppedText(e.Data);
                 if (text == null) return;
                 Activate();
@@ -322,6 +279,14 @@ namespace Stash
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
+            // Typing or pasting into the link field behaves like a normal text box.
+            if (ActiveControl is TextBox || (linkBar != null && linkBar.InputFocused)) return;
+            if (e.KeyCode == Keys.L && e.Control)
+            {
+                e.SuppressKeyPress = true;
+                linkBar.FocusInput();
+                return;
+            }
             if ((e.Control && e.KeyCode == Keys.V) || (e.Shift && e.KeyCode == Keys.Insert))
             {
                 e.SuppressKeyPress = true;
@@ -341,295 +306,66 @@ namespace Stash
             ffmpegPath = ExternalToolService.FindExecutable(binFolder, "ffmpeg.exe");
         }
 
-        private string GetFolderShortDisplayName(string fullPath)
-        {
-            if (string.IsNullOrWhiteSpace(fullPath)) return "Downloads";
-            string trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            string leaf = Path.GetFileName(trimmed);
-            if (string.IsNullOrEmpty(leaf)) return trimmed;
-            if (leaf.Length > 20) return leaf.Substring(0, 18) + "…";
-            return leaf;
-        }
-
-        private string GetEmbedShortDisplayName()
-        {
-            if (settings.EmbedMetadata && settings.EmbedThumbnail) return "Tags + Art";
-            if (settings.EmbedMetadata) return "Metadata";
-            if (settings.EmbedThumbnail) return "Thumbnail";
-            return "None";
-        }
-
-        private string GetSubtitlesShortDisplayName()
-        {
-            if (settings.EmbedSubtitles && settings.IncludeAutoCaptions) return "On + Auto";
-            if (settings.EmbedSubtitles) return "On";
-            if (settings.IncludeAutoCaptions) return "Auto Only";
-            return "Off";
-        }
-
-        private string GetOptionsSummaryLabel()
-        {
-            return "Options";
-        }
-
         private void InitializeUi()
         {
             // Geometry is explicitly converted from 96-DPI units by Dpi.Px.
             // Disable WinForms' additional automatic pass to avoid double scaling.
             AutoScaleMode = AutoScaleMode.None;
             Text = "Stash";
-            Size = new Size(Dpi.Px(1020), Dpi.Px(660));
-            MinimumSize = new Size(Dpi.Px(880), Dpi.Px(520));
+            Size = new Size(Dpi.Px(980), Dpi.Px(640));
+            MinimumSize = new Size(Dpi.Px(720), Dpi.Px(460));
             StartPosition = FormStartPosition.CenterScreen;
-            Font = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
+            Font = Theme.GetFont("Segoe UI", 9.5F);
             ShowIcon = true;
             try
             {
                 Icon exeIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
                 if (exeIcon != null) Icon = exeIcon;
             }
-            catch { }
+            catch (Exception ex) { AppLog.Error("Could not load the window icon", ex); }
 
             appToolTip = new ToolTip();
 
-            // 1. Top Command Flow Bar
-            Panel pnlTopBar = new Panel
+            // 1. Header: one link field with the download preset and the Download button.
+            Panel header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = Dpi.Px(66),
-                Padding = new Padding(Dpi.Px(18), Dpi.Px(13), Dpi.Px(18), Dpi.Px(13)),
+                Height = Dpi.Px(96),
+                Padding = new Padding(Dpi.Px(20), Dpi.Px(18), Dpi.Px(20), 0),
                 BackColor = Theme.BgTopBar
             };
-            pnlTopBar.Paint += (s, e) =>
+            header.Paint += (s, e) =>
             {
-                using (Pen borderPen = new Pen(Theme.BorderSubtle, 1f))
-                {
-                    e.Graphics.DrawLine(borderPen, 0, pnlTopBar.Height - Dpi.Px(1), pnlTopBar.Width, pnlTopBar.Height - Dpi.Px(1));
-                }
+                using (Pen border = new Pen(Theme.BorderSubtle))
+                    e.Graphics.DrawLine(border, 0, header.Height - 1, header.Width, header.Height - 1);
             };
 
-            FlowLayoutPanel flowTop = new FlowLayoutPanel
+            linkBar = new LinkInputBar { Dock = DockStyle.Top };
+            linkBar.SubmitRequested += SubmitLink;
+            linkBar.PresetClicked += (s, e) => ShowSettingsPopup(linkBar.PresetAnchor, false, -1);
+            linkBar.OptionsClicked += (s, e) => ShowSettingsPopup(linkBar.OptionsAnchor, true, -1);
+            appToolTip.SetToolTip(linkBar.OptionsAnchor, "Subtitles, embedding, parallel downloads, speed, file names, cookies and clipboard");
+
+            Label hint = new Label
             {
-                Dock = DockStyle.Fill,
-                WrapContents = true,
-                AutoSize = false,
-                BackColor = Theme.BgTopBar
-            };
-            flowTop.Layout += (s, e) =>
-            {
-                int desiredHeight = flowTop.GetPreferredSize(new Size(flowTop.ClientSize.Width, 0)).Height
-                    + pnlTopBar.Padding.Vertical;
-                if (pnlTopBar.Height != desiredHeight) pnlTopBar.Height = desiredHeight;
-            };
-
-            // Purple "[Paste Link]" Hero Button
-            btnPasteHero = new PasteLinkHeroButton
-            {
-                Margin = new Padding(0, 0, Dpi.Px(6), 0)
-            };
-            appToolTip.SetToolTip(btnPasteHero, "Paste link from clipboard & download immediately (Ctrl+V). You can also drag links onto the window.");
-            btnPasteHero.Click += (s, e) => PasteFromClipboardAndDownload();
-
-            // Smaller Minimalist Toggle Switch (No icon)
-            toggleSmartMode = new CompactToggleSwitch
-            {
-                Checked = true,
-                Margin = new Padding(0, Dpi.Px(10), Dpi.Px(10), 0)
-            };
-            appToolTip.SetToolTip(toggleSmartMode, "Toggle quick format & quality selectors");
-
-            // "Download  Video ⌄"
-            selDownloadFormat = new InlineFlowSelector("Download", FormatShortNames[settings.FormatIndex])
-            {
-                Margin = new Padding(0, 0, Dpi.Px(8), 0)
-            };
-            selDownloadFormat.Clicked += (s, e) => ShowFormatPopup();
-
-            // "Quality  Best ⌄"
-            selQuality = new InlineFlowSelector("Quality", QualityShortNames[settings.QualityIndex])
-            {
-                Margin = new Padding(0, 0, Dpi.Px(8), 0)
-            };
-            selQuality.Clicked += (s, e) => ShowQualityPopup();
-
-            // "Save to  Downloads ⌄"
-            selSaveTo = new InlineFlowSelector("Save to", GetFolderShortDisplayName(settings.CurrentOutputFolder))
-            {
-                Margin = new Padding(0, 0, Dpi.Px(8), 0)
-            };
-            appToolTip.SetToolTip(selSaveTo, settings.CurrentOutputFolder);
-            selSaveTo.Clicked += (s, e) => ShowSaveToHistoryPopup();
-
-            // Keep download options alongside the other download settings.
-            selOptions = new InlineFlowSelector("", GetOptionsSummaryLabel())
-            {
-                Margin = new Padding(0),
-                AccessibleName = "Download options",
-                AccessibleRole = AccessibleRole.PushButton
-            };
-            appToolTip.SetToolTip(selOptions, "Download options");
-            selOptions.Clicked += (s, e) => ShowOptionsNestedPopup();
-
-            selBrowserCookies = new InlineFlowSelector("Browser Cookies", "")
-            {
-                Margin = new Padding(0),
-                IconOnly = true,
-                Dock = DockStyle.Right,
-                AccessibleName = "Browser Cookies",
-                AccessibleRole = AccessibleRole.PushButton
-            };
-            UpdateBrowserCookiesTooltip();
-            selBrowserCookies.Clicked += (s, e) => ShowBrowserCookiesPopup();
-
-            toggleSmartMode.CheckedChanged += (s, e) =>
-            {
-                bool on = toggleSmartMode.Checked;
-                selDownloadFormat.Enabled = on;
-                UpdateQualitySelectorEnabledState();
-                selSaveTo.Enabled = on;
-                selOptions.Enabled = on;
-                selBrowserCookies.Enabled = on;
-            };
-
-            UpdateQualitySelectorEnabledState();
-
-            flowTop.Controls.Add(btnPasteHero);
-            flowTop.Controls.Add(selDownloadFormat);
-            flowTop.Controls.Add(selQuality);
-            flowTop.Controls.Add(selSaveTo);
-            flowTop.Controls.Add(selOptions);
-
-            pnlTopBar.Controls.Add(flowTop);
-            pnlTopBar.Controls.Add(selBrowserCookies);
-
-            // 2. Secondary Sub-Toolbar (Queue Stats + Engine Status + Action Buttons)
-            TableLayoutPanel pnlQueueBar = new TableLayoutPanel
-            {
+                Text = "Ctrl+V anywhere also works. You can drag links onto the window, too.",
                 Dock = DockStyle.Top,
-                Height = Dpi.Px(44),
-                ColumnCount = 4,
-                RowCount = 1,
-                Padding = new Padding(Dpi.Px(18), Dpi.Px(8), Dpi.Px(18), Dpi.Px(4)),
-                BackColor = Theme.BgWindow
-            };
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-            lblQueueStats = new Label
-            {
-                Text = "QUEUE  •  0 ITEMS",
-                AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                Font = Theme.GetFont("Segoe UI Semibold", 8.8F, FontStyle.Bold),
-                ForeColor = Theme.TextMuted
-            };
-
-            lblToolsStatus = new Label
-            {
-                Text = "Checking engine...",
-                AutoSize = true,
-                Anchor = AnchorStyles.Right,
-                Cursor = Cursors.Hand,
-                Font = Theme.GetFont("Segoe UI Semibold", 8.5F, FontStyle.Bold),
-                Margin = new Padding(0, 0, Dpi.Px(10), 0),
-                ForeColor = Theme.AccentWarning
-            };
-            lblToolsStatus.Click += BtnInstallTools_Click;
-
-            btnCancelSelected = new ModernButton
-            {
-                Text = "Cancel Selected",
-                Size = new Size(Dpi.Px(115), Dpi.Px(27)),
-                Margin = new Padding(0, 0, Dpi.Px(8), 0),
-                BaseColor = Color.FromArgb(46, 24, 28),
-                HoverColor = Color.FromArgb(64, 30, 36),
-                ForeColor = Color.FromArgb(252, 165, 165),
-                Font = Theme.GetFont("Segoe UI Semibold", 8.5F, FontStyle.Bold),
-                CornerRadius = Dpi.Px(6)
-            };
-            btnCancelSelected.Click += BtnCancelSelected_Click;
-
-            btnRemoveFinished = new ModernButton
-            {
-                Text = "Clear Finished",
-                Size = new Size(Dpi.Px(106), Dpi.Px(27)),
-                Margin = new Padding(0, 0, Dpi.Px(8), 0),
-                BaseColor = Theme.BgSurface,
-                HoverColor = Theme.BgSurfaceHover,
-                BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary,
+                Height = Dpi.Px(26),
+                Padding = new Padding(Dpi.Px(4), Dpi.Px(7), 0, 0),
+                ForeColor = Theme.TextMuted,
                 Font = Theme.GetFont("Segoe UI", 8.5F),
-                CornerRadius = Dpi.Px(6)
+                UseMnemonic = false
             };
-            btnRemoveFinished.Click += BtnRemoveFinished_Click;
-            appToolTip.SetToolTip(btnRemoveFinished, "Remove completed, cancelled and failed items from the list");
-            appToolTip.SetToolTip(btnCancelSelected, "Cancel the selected download (Del)");
-            btnCancelSelected.Enabled = false;
+            header.Controls.Add(hint);
+            header.Controls.Add(linkBar);
 
-            btnPauseAll = new ModernButton
-            {
-                Text = "Pause All",
-                Size = new Size(Dpi.Px(96), Dpi.Px(27)),
-                Margin = new Padding(0, 0, Dpi.Px(8), 0),
-                BaseColor = Theme.BgSurface,
-                HoverColor = Theme.BgSurfaceHover,
-                BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary,
-                Font = Theme.GetFont("Segoe UI", 8.5F),
-                CornerRadius = Dpi.Px(6),
-                Enabled = false
-            };
-            btnPauseAll.Click += BtnPauseAll_Click;
-            appToolTip.SetToolTip(btnPauseAll, "Pause or resume every download in the queue");
-
-            btnInformation = new InformationIconButton
-            {
-                Size = new Size(Dpi.Px(30), Dpi.Px(27)), AccessibleName = "About Stash and updates",
-                Margin = new Padding(0), BaseColor = Theme.BgTopBar,
-                HoverColor = Theme.BgSurfaceHover, BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary, Font = Theme.GetFont("Segoe UI Symbol", 12F), CornerRadius = Dpi.Px(6)
-            };
-            appToolTip.SetToolTip(btnInformation, "About Stash and updates");
-            btnInformation.Click += async (s, e) => await ShowInformationAsync();
-
-            pnlQueueBar.Controls.Add(lblQueueStats, 0, 0);
-            pnlQueueBar.Controls.Add(btnPauseAll, 1, 0);
-            pnlQueueBar.Controls.Add(btnCancelSelected, 2, 0);
-            pnlQueueBar.Controls.Add(btnRemoveFinished, 3, 0);
-
-            TableLayoutPanel statusBar = new TableLayoutPanel
-            {
-                Dock = DockStyle.Bottom, Height = Dpi.Px(38), ColumnCount = 4, RowCount = 1,
-                Padding = new Padding(Dpi.Px(20), Dpi.Px(5), Dpi.Px(18), Dpi.Px(5)), BackColor = Theme.BgTopBar
-            };
-            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            statusBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            lblToolsStatus.Anchor = AnchorStyles.Left;
-            Label versionLabel = new Label
-            {
-                Text = "v" + UpdateService.InstalledVersion, AutoSize = true, Anchor = AnchorStyles.Right,
-                ForeColor = Theme.TextMuted, Font = Theme.GetFont("Segoe UI", 8F),
-                Margin = new Padding(Dpi.Px(12), 0, Dpi.Px(8), 0)
-            };
-            btnInformation.Anchor = AnchorStyles.Right;
-            statusBar.Controls.Add(lblToolsStatus, 0, 0);
-            statusBar.Controls.Add(versionLabel, 2, 0);
-            statusBar.Controls.Add(btnInformation, 3, 0);
-            notice = new Label { AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = Theme.TextSecondary, Visible = false, Margin = new Padding(Dpi.Px(12), 0, 0, 0) };
-            statusBar.Controls.Add(notice, 1, 0);
-
-            // 4. Center Custom Card Queue List
+            // 2. Queue
             Panel pnlCenter = new Panel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(Dpi.Px(18), Dpi.Px(4), Dpi.Px(18), Dpi.Px(6)),
+                Padding = new Padding(Dpi.Px(20), Dpi.Px(10), Dpi.Px(20), Dpi.Px(6)),
                 BackColor = Theme.BgWindow
             };
-
             queueListView = new QueueListControl
             {
                 Dock = DockStyle.Fill,
@@ -639,9 +375,10 @@ namespace Stash
             queueListView.CancelRequested += CancelSingleItem;
             queueListView.DetailsRequested += item =>
             {
-                using (DownloadDetailsDialog dialog = new DownloadDetailsDialog(item.Failure ?? DownloadFailure.Create("Downloading", "No engine error was provided."))) dialog.ShowDialog(this);
+                using (DownloadDetailsDialog dialog = new DownloadDetailsDialog(item.Failure ?? DownloadFailure.Create("Downloading", "No engine error was provided.")))
+                    dialog.ShowDialog(this);
             };
-            queueListView.RetryRequested += item => downloadManager.Retry(item, settings.BrowserCookies);
+            queueListView.RetryRequested += item => { downloadManager.Retry(item, settings.BrowserCookies); ProcessQueue(); };
             queueListView.RemoveRequested += item =>
             {
                 if (downloadManager.RemoveFinished(item)) queueListView.RemoveItem(item);
@@ -650,16 +387,98 @@ namespace Stash
             queueListView.OpenFileFolderRequested += OpenCompletedItemFolder;
             queueListView.OpenFileRequested += OpenCompletedFile;
             queueListView.CopyUrlRequested += CopyItemUrl;
-            queueListView.SelectionChanged += (s, e) => UpdateSelectionButtons();
+            queueListView.SectionActionRequested += HandleSectionAction;
             pnlCenter.Controls.Add(queueListView);
 
-            Controls.Add(pnlCenter);
+            // 3. Footer: queue summary or engine status, notices, and quiet icon buttons.
+            TableLayoutPanel footer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                Height = Dpi.Px(40),
+                ColumnCount = 5,
+                RowCount = 1,
+                Padding = new Padding(Dpi.Px(20), Dpi.Px(4), Dpi.Px(14), Dpi.Px(4)),
+                BackColor = Theme.BgWindow
+            };
+            footer.Paint += (s, e) =>
+            {
+                using (Pen border = new Pen(Theme.BorderSubtle)) e.Graphics.DrawLine(border, 0, 0, footer.Width, 0);
+            };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-            Controls.Add(statusBar);
-            Controls.Add(pnlQueueBar);
-            Controls.Add(pnlTopBar);
+            lblToolsStatus = new Label
+            {
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Cursor = Cursors.Hand,
+                Font = Theme.GetFont("Segoe UI Semibold", 8.75F),
+                ForeColor = Theme.AccentWarning,
+                Margin = new Padding(0, 0, Dpi.Px(14), 0),
+                Visible = false,
+                UseMnemonic = false
+            };
+            lblToolsStatus.Click += BtnInstallTools_Click;
+
+            lblQueueSummary = new Label
+            {
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Font = Theme.GetFont("Segoe UI", 8.75F),
+                ForeColor = Theme.TextMuted,
+                Margin = Padding.Empty,
+                UseMnemonic = false
+            };
+
+            notice = new Label
+            {
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                ForeColor = Theme.TextSecondary,
+                Font = Theme.GetFont("Segoe UI", 8.75F),
+                Visible = false,
+                Margin = new Padding(Dpi.Px(14), 0, 0, 0),
+                UseMnemonic = false
+            };
+
+            btnCookies = CreateFooterButton(IconKind.Cookie, "Browser cookies");
+            btnCookies.Click += (s, e) => ShowCookiesPopup();
+            btnInformation = CreateFooterButton(IconKind.Info, "About Stash, updates and download engines");
+            btnInformation.Click += async (s, e) => await ShowInformationAsync();
+
+            footer.Controls.Add(lblToolsStatus, 0, 0);
+            footer.Controls.Add(lblQueueSummary, 1, 0);
+            footer.Controls.Add(notice, 2, 0);
+            footer.Controls.Add(btnCookies, 3, 0);
+            footer.Controls.Add(btnInformation, 4, 0);
+
+            Controls.Add(pnlCenter);
+            Controls.Add(footer);
+            Controls.Add(header);
+            UpdatePreset();
+            UpdateBrowserCookiesTooltip();
             EnableLinkDrop(this);
         }
 
+        private IconButton CreateFooterButton(IconKind icon, string tooltip)
+        {
+            IconButton button = new IconButton(icon, tooltip) { Margin = new Padding(Dpi.Px(2), 0, 0, 0), Anchor = AnchorStyles.Right };
+            appToolTip.SetToolTip(button, tooltip);
+            return button;
+        }
+
+        private void SubmitLink(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                PasteFromClipboardAndDownload();
+                return;
+            }
+            if (DownloadUrlValidator.ExtractUrls(text).Count > 0) linkBar.Clear();
+            ProcessInputText(text, InputSource.Paste);
+        }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -48,6 +49,68 @@ namespace Stash
                 }
                 return font;
             }
+        }
+
+        public static readonly Color AccentText = Color.FromArgb(180, 160, 252);
+        public static readonly Color DangerText = Color.FromArgb(252, 165, 165);
+
+        // The one button style used across the window and every dialog: primary buttons are the
+        // single accent action in a view; secondary buttons are outlined and quiet.
+        public static ModernButton CreateButton(string text, bool primary, int minimumWidth = 88)
+        {
+            Font font = GetFont("Segoe UI Semibold", 9F);
+            int width = Math.Max(Dpi.Px(minimumWidth), TextRenderer.MeasureText(text, font).Width + Dpi.Px(32));
+            return new ModernButton
+            {
+                Text = text,
+                Size = new Size(width, Dpi.Px(34)),
+                Font = font,
+                CornerRadius = Dpi.Px(8),
+                BaseColor = primary ? BrandPurple : BgSurface,
+                HoverColor = primary ? BrandPurpleHover : BgSurfaceHover,
+                BorderColor = primary ? Color.Empty : BorderSubtle,
+                ForeColor = primary ? Color.White : TextPrimary,
+                Margin = new Padding(Dpi.Px(8), 0, 0, 0)
+            };
+        }
+
+        // Standard dialog footer: buttons right-aligned in the order given (left to right).
+        public static Panel CreateDialogFooter(params Control[] buttons)
+        {
+            FlowLayoutPanel footer = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                Height = Dpi.Px(62),
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false,
+                Padding = new Padding(Dpi.Px(16), Dpi.Px(14), Dpi.Px(16), 0),
+                BackColor = BgTopBar
+            };
+            footer.Paint += (s, e) =>
+            {
+                using (Pen p = new Pen(BorderSubtle)) e.Graphics.DrawLine(p, 0, 0, footer.Width, 0);
+            };
+            for (int i = buttons.Length - 1; i >= 0; i--) footer.Controls.Add(buttons[i]);
+            return footer;
+        }
+
+        // Standard dialog heading: title with an optional muted subtitle.
+        public static Label CreateDialogTitle(string text)
+        {
+            return new Label
+            {
+                Text = text, AutoSize = true, UseMnemonic = false, BackColor = Color.Transparent,
+                Font = GetFont("Segoe UI Semibold", 12.5F), ForeColor = TextPrimary
+            };
+        }
+
+        public static Label CreateDialogText(string text, int maxWidth)
+        {
+            return new Label
+            {
+                Text = text, AutoSize = true, MaximumSize = new Size(maxWidth, 0), UseMnemonic = false, BackColor = Color.Transparent,
+                Font = GetFont("Segoe UI", 9.5F), ForeColor = TextSecondary
+            };
         }
 
         // Draws the standard bordered surface used by popup panels.

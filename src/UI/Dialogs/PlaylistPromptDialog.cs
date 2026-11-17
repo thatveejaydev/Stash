@@ -80,14 +80,14 @@ namespace Stash
             hasSingleVideo = DownloadUrlValidator.TryExtractSingleVideoUrl(url, out singleVideoUrl, out singleVideoId);
             selectedChoice = PlaylistDownloadChoice.EntirePlaylist;
 
-            Text = "Playlist Detected";
+            Text = "Playlist detected";
             AutoScaleMode = AutoScaleMode.None;
-            ClientSize = new Size(Dpi.Px(680), Dpi.Px(385));
+            ClientSize = new Size(Dpi.Px(680), Dpi.Px(384));
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            BackColor = Theme.BgTopBar;
+
             Font = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
 
             try
@@ -135,17 +135,17 @@ namespace Stash
 
             lblTitle = new Label
             {
-                Text = "Playlist Link Detected",
+                Text = "Playlist detected",
                 Location = new Point(Dpi.Px(70), Dpi.Px(16)),
                 AutoSize = true,
-                Font = Theme.GetFont("Segoe UI Semibold", 11.5F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 12.5F),
                 ForeColor = Theme.TextPrimary
             };
             Controls.Add(lblTitle);
 
             lblPlaylistInfo = new Label
             {
-                Text = "Inspecting playlist details...",
+                Text = "Reading the playlist…",
                 Location = new Point(Dpi.Px(70), Dpi.Px(40)),
                 Size = new Size(Dpi.Px(580), Dpi.Px(20)),
                 AutoEllipsis = true,
@@ -286,78 +286,39 @@ namespace Stash
 
             Controls.Add(cardRange);
 
-            // Divider
-            Panel divider = new Panel
-            {
-                Location = new Point(Dpi.Px(20), Dpi.Px(300)),
-                Size = new Size(cardWidth, Dpi.Px(1)),
-                BackColor = Theme.BorderSubtle
-            };
-            Controls.Add(divider);
-
-            // Status label
+            // Status line under the choices; buttons live in the standard footer.
             lblStatus = new Label
             {
-                Text = "\u25CF Checking playlist...",
-                Location = new Point(Dpi.Px(20), Dpi.Px(324)),
+                Text = "Checking playlist…",
+                Location = new Point(Dpi.Px(22), Dpi.Px(296)),
                 AutoSize = true,
-                Font = Theme.GetFont("Segoe UI", 8.8F),
-                ForeColor = Theme.AccentWarning
+                Font = Theme.GetFont("Segoe UI", 8.75F),
+                ForeColor = Theme.AccentWarning,
+                UseMnemonic = false
             };
             Controls.Add(lblStatus);
 
-            btnRetry = new ModernButton
-            {
-                Text = "Retry",
-                Location = new Point(Dpi.Px(265), Dpi.Px(316)),
-                Size = new Size(Dpi.Px(80), Dpi.Px(38)),
-                BaseColor = Theme.BgSurface,
-                HoverColor = Theme.BgSurfaceHover,
-                BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary,
-                Font = Theme.GetFont("Segoe UI", 9F),
-                Visible = false
-            };
+            btnRetry = Theme.CreateButton("Retry", false, 80);
+            btnRetry.Visible = false;
             btnRetry.Click += (s, e) => LoadPlaylistInfoAsync();
-            Controls.Add(btnRetry);
             elapsedTimer.Tick += (s, e) =>
             {
                 int seconds = (int)(DateTime.UtcNow - lookupStarted).TotalSeconds;
-                lblStatus.Text = string.Format("● Checking playlist... {0}s", seconds);
+                lblStatus.Text = string.Format("Checking playlist… {0}s", seconds);
             };
             FormClosed += (s, e) => { if (lookup != null) lookup.Cancel(); elapsedTimer.Stop(); };
 
-            // Buttons
-            btnCancel = new ModernButton
-            {
-                Text = "Cancel",
-                Location = new Point(Dpi.Px(355), Dpi.Px(316)),
-                Size = new Size(Dpi.Px(85), Dpi.Px(38)),
-                BaseColor = Theme.BgSurface,
-                HoverColor = Theme.BgSurfaceHover,
-                BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary,
-                Font = Theme.GetFont("Segoe UI", 9F)
-            };
+            btnCancel = Theme.CreateButton("Cancel", false, 80);
             btnCancel.Click += (s, e) =>
             {
                 DialogResult = DialogResult.Cancel;
                 Close();
             };
-            Controls.Add(btnCancel);
 
-            btnQueue = new ModernButton
-            {
-                Text = "Queue Downloads",
-                Location = new Point(Dpi.Px(450), Dpi.Px(316)),
-                Size = new Size(Dpi.Px(210), Dpi.Px(38)),
-                BaseColor = Theme.BrandPurple,
-                HoverColor = Theme.BrandPurpleHover,
-                Font = Theme.GetFont("Segoe UI Semibold", 9F, FontStyle.Bold),
-                Enabled = false
-            };
+            btnQueue = Theme.CreateButton("Queue entire playlist", true, 220);
+            btnQueue.Enabled = false;
             btnQueue.Click += BtnQueue_Click;
-            Controls.Add(btnQueue);
+            Controls.Add(Theme.CreateDialogFooter(btnRetry, btnCancel, btnQueue));
 
             AcceptButton = btnQueue;
             CancelButton = btnCancel;
@@ -447,12 +408,12 @@ namespace Stash
             if (selectedChoice == PlaylistDownloadChoice.EntirePlaylist)
             {
                 btnQueue.Text = totalCount > 0
-                    ? string.Format("Queue Entire Playlist ({0})", totalCount)
-                    : "Queue Entire Playlist";
+                    ? string.Format("Queue entire playlist ({0})", totalCount)
+                    : "Queue entire playlist";
             }
             else if (selectedChoice == PlaylistDownloadChoice.SingleVideoOnly)
             {
-                btnQueue.Text = "Queue Single Video";
+                btnQueue.Text = "Queue single video";
                 // The linked video is known from the URL even if the playlist could not be listed.
                 canQueue = hasSingleVideo || totalCount > 0;
             }
@@ -461,11 +422,11 @@ namespace Stash
                 int fromVal = stepperFrom.Value;
                 int toVal = stepperTo.Value;
                 canQueue = canQueue && fromVal >= 1 && fromVal <= toVal && toVal <= totalCount;
-                btnQueue.Text = "Queue Range";
+                btnQueue.Text = "Queue range";
                 if (canQueue)
                 {
                     int count = toVal - fromVal + 1;
-                    btnQueue.Text = string.Format("Queue {0} {1}", count, count == 1 ? "Video" : "Videos");
+                    btnQueue.Text = string.Format("Queue {0} {1}", count, count == 1 ? "video" : "videos");
                 }
             }
 
@@ -477,8 +438,8 @@ namespace Stash
             if (lookup != null) return;
             lookup = new CancellationTokenSource();
             btnRetry.Visible = false;
-            lblPlaylistInfo.Text = "Inspecting playlist details...";
-            lblStatus.Text = "\u25cf Checking playlist...";
+            lblPlaylistInfo.Text = "Reading the playlist…";
+            lblStatus.Text = "Checking playlist…";
             lblStatus.ForeColor = Theme.AccentWarning;
             lookupStarted = DateTime.UtcNow;
             elapsedTimer.Start();
@@ -532,21 +493,21 @@ namespace Stash
                     stepperTo.Value = count;
                 }
 
-                lblStatus.Text = string.Format("\u25CF {0} videos ready", count);
+                lblStatus.Text = string.Format("{0} videos ready", count);
                 lblStatus.ForeColor = Theme.AccentSuccess;
             }
             else if (playlistInfo != null && playlistInfo.CookieAccessFailed)
             {
-                lblPlaylistInfo.Text = "Could not read browser cookies. Check the cookie icon in the toolbar.";
-                lblStatus.Text = "\u25CF Browser cookies unavailable";
+                lblPlaylistInfo.Text = "Couldn't read browser cookies. Choose another browser in download settings.";
+                lblStatus.Text = "Browser cookies unavailable";
                 lblStatus.ForeColor = Theme.AccentDanger;
             }
             else
             {
                 lblPlaylistInfo.Text = playlistInfo != null && playlistInfo.TimedOut
                     ? "The playlist took too long to list. Retry, or queue the single video."
-                    : "Could not retrieve the video list.";
-                lblStatus.Text = playlistInfo != null && playlistInfo.TimedOut ? "\u25CF Timed out" : "\u25CF Playlist unavailable";
+                    : "Couldn't read the video list. Retry, or queue the single video.";
+                lblStatus.Text = playlistInfo != null && playlistInfo.TimedOut ? "Timed out" : "Playlist unavailable";
                 lblStatus.ForeColor = Theme.AccentWarning;
             }
             btnRetry.Visible = count == 0;

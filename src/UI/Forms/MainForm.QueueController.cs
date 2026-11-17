@@ -222,14 +222,10 @@ namespace Stash
                 if (DownloadManager.IsActive(item.Status) || item.Status == QueueItemStatus.Queued) progress += Math.Max(0, Math.Min(100, item.ProgressPercent));
             }
 
-            if (running > 0)
-                lblQueueStats.Text = string.Format("QUEUE  •  {0} ACTIVE  •  {1} OF {2} COMPLETED", running, done, total);
-            else
-                lblQueueStats.Text = string.Format("QUEUE  •  {0} ITEMS  ({1} COMPLETED)", total, done);
-
-            btnPauseAll.Text = running + waiting == 0 && paused > 0 ? "Resume All" : "Pause All";
-            btnPauseAll.Enabled = running + waiting + paused > 0;
-            UpdateSelectionButtons();
+            string summary = total == 0 ? "" : total == 1 ? "1 item" : total + " items";
+            if (running > 0) summary += "  ·  " + running + " downloading";
+            if (failed > 0) summary += "  ·  " + failed + " failed";
+            lblQueueSummary.Text = summary;
 
             int busy = running + waiting;
             IntPtr window = IsHandleCreated ? Handle : IntPtr.Zero;
@@ -242,12 +238,6 @@ namespace Stash
                 queueWasBusy = false;
                 NotifyQueueFinished(done, failed, paused);
             }
-        }
-
-        private void UpdateSelectionButtons()
-        {
-            DownloadQueueItem selected = queueListView.SelectedItem;
-            btnCancelSelected.Enabled = selected != null && DownloadManager.CanCancel(selected.Status);
         }
 
         private void NotifyQueueFinished(int completed, int failed, int paused)
@@ -335,14 +325,21 @@ namespace Stash
             downloadManager.Cancel(item);
         }
 
-        private void BtnPauseAll_Click(object sender, EventArgs e)
+        private void HandleSectionAction(QueueSectionAction action)
         {
-            if (btnPauseAll.Text == "Resume All")
+            if (action == QueueSectionAction.ResumeAll)
             {
                 downloadManager.ResumeAll();
                 ProcessQueue();
             }
-            else downloadManager.PauseAll();
+            else if (action == QueueSectionAction.PauseAll) downloadManager.PauseAll();
+            else
+            {
+                foreach (DownloadQueueItem item in queueListView.GetItems())
+                    if (item.Status == QueueItemStatus.Completed && downloadManager.RemoveFinished(item)) queueListView.RemoveItem(item);
+            }
+            queueListView.RefreshChangedItems();
+            queueListView.Invalidate();
             UpdateQueueHeaderStats();
         }
 
@@ -395,24 +392,6 @@ namespace Stash
                 catch (ExternalException) { System.Threading.Thread.Sleep(40); }
             }
             ShowNotice("The clipboard is busy. Try again.");
-        }
-
-        private void BtnCancelSelected_Click(object sender, EventArgs e)
-        {
-            CancelSingleItem(queueListView.SelectedItem);
-        }
-
-        private void BtnRemoveFinished_Click(object sender, EventArgs e)
-        {
-            List<DownloadQueueItem> current = queueListView.GetItems();
-            foreach (DownloadQueueItem item in current)
-            {
-                if (downloadManager.RemoveFinished(item))
-                {
-                    queueListView.RemoveItem(item);
-                }
-            }
-            UpdateQueueHeaderStats();
         }
 
         private void RefreshQueueUi()

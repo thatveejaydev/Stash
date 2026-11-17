@@ -28,7 +28,7 @@ Stash is powered by two open-source tools:
 - Download video and audio from [**websites**](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) supported by yt-dlp, including YouTube, Instagram, TikTok, Facebook, Vimeo, and SoundCloud.
 - Download individual videos, Shorts, playlists, albums, and other supported collections.
 - Paste one link or multiple links at once.
-- Click **Paste Link** or press `Ctrl+V` or `Shift+Insert` to add links and begin downloading.
+- Paste a link into the link field and click **Download**, or press `Ctrl+V` or `Shift+Insert` anywhere in the window.
 
 ### Choose your format and quality
 
@@ -58,7 +58,7 @@ Stash is powered by two open-source tools:
 - Pause, resume, cancel, retry, or remove individual downloads, or pause and resume the whole queue at once.
 - Close Stash mid-download and continue where you left off next time.
 - Use the keyboard or right-click a download for quick actions.
-- Clear completed downloads from the queue with one button.
+- Clear completed downloads with **Clear** next to the Completed section.
 
 ### Organize downloaded files
 
@@ -80,7 +80,7 @@ Stash is powered by two open-source tools:
 
 - Runs entirely on your Windows computer.
 - Requires no Stash account.
-- For videos that require a site login, use the toolbar's cookie menu to select a browser where you're already signed in. Firefox is recommended on Windows.
+- For videos that require a site login, use the cookie button at the bottom right (or **Cookies** under **More options**) to select a browser where you're already signed in. Firefox is recommended on Windows.
 - Uses no cloud processing or tracking.
 
 ## 📥 Installation
@@ -88,7 +88,7 @@ Stash is powered by two open-source tools:
 1. Download the latest `Stash.exe` from the [Releases page](https://github.com/thatveejaydev/Stash/releases/latest).
 2. Open `Stash.exe`.
 3. Click the missing-engine status in the bottom bar to install yt-dlp and FFmpeg, or accept the installation prompt when pasting a link.
-4. Copy a supported media link and select **Paste Link**.
+4. Copy a supported media link, paste it into the link field and click **Download**.
 
 Stash requires 64-bit Windows and an internet connection. No traditional installation is required.
 
@@ -98,7 +98,7 @@ Stash stores your preferences and download tools in your Windows user folder. Th
 
 When upgrading from an older version, Stash automatically moves compatible settings and tools to the new location. Each Windows account and computer keeps its own copy.
 
-If the required tools are missing, click the missing-engine status to download them. Once installed, hover over **Engine Ready** for the update hint and click it to check for engine updates.
+If the required tools are missing, click the install message at the bottom of the window to download them. To update them later, open **About** (the info button at the bottom right) and click **Update engines**.
 
 ## 🖥️ Development
 

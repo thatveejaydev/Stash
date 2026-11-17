@@ -18,16 +18,28 @@ namespace Stash
             informationDialogOpen = true;
             try
             {
-                using (AppInformationDialog dialog = new AppInformationDialog(updateService))
+                using (AppInformationDialog dialog = new AppInformationDialog(updateService, GetEngineStatusText()))
                 {
                     if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedUpdate != null)
                         await DownloadAndApplyUpdateAsync(dialog.SelectedUpdate);
+                    else if (dialog.EngineUpdateRequested)
+                        RunEngineOperationAsync(false);
                 }
             }
             finally
             {
                 informationDialogOpen = false;
             }
+        }
+
+        private string GetEngineStatusText()
+        {
+            if (engineOperationRunning) return "The engines are being updated now.";
+            if (!File.Exists(ytDlpPath) || !File.Exists(ffmpegPath)) return "yt-dlp or FFmpeg is missing. Install them to download.";
+            DateTime checkedAt = settings.LastEngineCheckUtc;
+            return checkedAt == DateTime.MinValue || checkedAt.Year < 2000
+                ? "yt-dlp and FFmpeg are installed."
+                : "yt-dlp and FFmpeg are installed. Last checked " + checkedAt.ToLocalTime().ToString("d MMM yyyy") + ".";
         }
 
         private async Task DownloadAndApplyUpdateAsync(UpdateInfo update)

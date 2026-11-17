@@ -21,20 +21,20 @@ namespace Stash
             bool hasYtDlp = File.Exists(ytDlpPath);
             bool hasFfmpeg = File.Exists(ffmpegPath);
 
+            // The footer stays quiet while engines are fine; it only speaks up when action is needed.
             if (hasYtDlp && hasFfmpeg)
             {
-                lblToolsStatus.Text = "● Engine Ready";
-                lblToolsStatus.ForeColor = Theme.AccentSuccess;
-                appToolTip.SetToolTip(lblToolsStatus, "Click to update yt-dlp (and FFmpeg when it is over 30 days old).");
+                lblToolsStatus.Visible = false;
             }
             else
             {
                 List<string> missing = new List<string>();
                 if (!hasYtDlp) missing.Add("yt-dlp");
                 if (!hasFfmpeg) missing.Add("FFmpeg");
-                lblToolsStatus.Text = "● Missing: " + string.Join(" & ", missing);
+                lblToolsStatus.Text = "Install " + string.Join(" and ", missing) + " to start downloading";
                 lblToolsStatus.ForeColor = Theme.AccentWarning;
-                appToolTip.SetToolTip(lblToolsStatus, "Click to install yt-dlp and FFmpeg.");
+                lblToolsStatus.Visible = true;
+                appToolTip.SetToolTip(lblToolsStatus, "Click to install the download engines.");
             }
         }
 
@@ -64,13 +64,15 @@ namespace Stash
             }
             engineOperationRunning = true;
             lblToolsStatus.ForeColor = Theme.TextSecondary;
+            lblToolsStatus.Text = "Preparing download engines…";
+            lblToolsStatus.Visible = true;
             lblToolsStatus.Cursor = Cursors.WaitCursor;
             appToolTip.SetToolTip(lblToolsStatus, "Preparing download engines...");
             EngineInstaller installer = new EngineInstaller(binFolder);
             EngineInstaller.ProgressReporter progress = (status, percent) =>
             {
                 if (IsDisposed || !IsHandleCreated) return;
-                BeginInvoke((Action)(() => { if (!IsDisposed) lblToolsStatus.Text = "● " + status; }));
+                BeginInvoke((Action)(() => { if (!IsDisposed) lblToolsStatus.Text = status; }));
             };
             bool installedSomething = false;
             try
@@ -84,7 +86,7 @@ namespace Stash
                 }
                 else
                 {
-                    lblToolsStatus.Text = "● Updating yt-dlp...";
+                    lblToolsStatus.Text = "Updating yt-dlp…";
                     Tuple<int, string> result = await EngineInstaller.SelfUpdateYtDlpAsync(installer.YtDlpPath);
                     if (result.Item1 != 0) logWriter.WriteError("yt-dlp update failed with exit code " + result.Item1 + ": " + result.Item2);
                     else if (!string.IsNullOrWhiteSpace(result.Item2)) AppendLog(result.Item2);

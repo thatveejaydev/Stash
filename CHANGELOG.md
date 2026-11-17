@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Redesign
+- **One Link Field:** A single field replaces the Paste Link button and the toolbar. Paste or type a link and press Enter or **Download**; an empty field downloads from the clipboard.
+- **Two Settings Menus:** The chip in the link field (for example "MP4 · Best · Downloads") sets format, quality and folder. **More options** holds subtitles, embedding, parallel downloads, speed boost, file names, cookies and clipboard watching. The cookie button in the footer opens only the browser cookie choices.
+- **Grouped Queue:** Downloads are split into **In progress** and **Completed**, with **Pause all/Resume all** and **Clear** next to each section instead of a row of buttons.
+- **Quieter Cards:** Each card shows its own buttons (pause, cancel, retry, details). Completed downloads show open, folder and more buttons on hover.
+- **Calmer Footer:** The footer shows a short queue summary and only mentions the engines when they need attention. Engine updates moved to **About**.
+- **Consistent Dialogs:** About, error details, rename, playlist and quit dialogs share one layout, button style and sentence-case wording.
+
 ### New Features
 - **Resume After Closing:** Closing Stash during downloads asks whether to pause them and continue next time, cancel them, or keep downloading. The queue, including finished history, is restored on the next launch.
 - **Pause All / Resume All:** One button pauses or resumes the whole queue.
