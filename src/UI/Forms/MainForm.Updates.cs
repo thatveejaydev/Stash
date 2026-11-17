@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public partial class MainForm
     {
@@ -44,7 +44,7 @@ namespace MediaDownloader
                 DialogResult open = MessageBox.Show(this,
                     "Stash cannot update its current folder because it is not writable. Open the GitHub release page to update manually?",
                     "Manual Update Required", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (open == DialogResult.Yes) try { Process.Start(update.ReleaseUrl); } catch { }
+                if (open == DialogResult.Yes) try { Process.Start(update.ReleaseUrl); } catch (Exception ex) { AppLog.Error("Could not open link", ex); }
                 return;
             }
             applyingUpdate = true;
@@ -52,6 +52,7 @@ namespace MediaDownloader
             try
             {
                 string downloaded = await updateService.DownloadAndVerifyAsync(update);
+                SaveQueue();
                 updateService.CreateAndLaunchHelper(downloaded, target, Process.GetCurrentProcess().Id);
                 shutdownComplete = true;
                 Close();
@@ -67,8 +68,7 @@ namespace MediaDownloader
         private bool HasActiveDownloads()
         {
             if (downloadManager == null) return false;
-            return downloadManager.GetItems().Exists(item => item.Status == QueueItemStatus.Downloading ||
-                item.Status == QueueItemStatus.Merging || item.Status == QueueItemStatus.FetchingInfo);
+            return downloadManager.GetItems().Exists(item => DownloadManager.IsActive(item.Status));
         }
     }
 }

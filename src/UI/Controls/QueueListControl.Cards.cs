@@ -5,12 +5,12 @@ using System.Drawing.Drawing2D;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public partial class QueueListControl
     {
-        private readonly Font cardTitleFont = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
-        private readonly Font cardDetailFont = new Font("Segoe UI", 8.5F);
+        private readonly Font cardTitleFont = Theme.GetFont("Segoe UI Semibold", 10F, FontStyle.Bold);
+        private readonly Font cardDetailFont = Theme.GetFont("Segoe UI", 8.5F);
         private static readonly int ProgressStripeSpacing = Dpi.Px(14);
         private readonly Dictionary<DownloadQueueItem, CardThumbnail> thumbnails = new Dictionary<DownloadQueueItem, CardThumbnail>();
         internal string ThumbnailDecoderPath { get; set; }
@@ -35,8 +35,6 @@ namespace MediaDownloader
                 progressAnimationTimer.Dispose();
                 foreach (CardThumbnail thumbnail in thumbnails.Values) thumbnail.Release();
                 thumbnails.Clear();
-                cardTitleFont.Dispose();
-                cardDetailFont.Dispose();
             }
             base.Dispose(disposing);
         }

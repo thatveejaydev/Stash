@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace MediaDownloader
+namespace Stash
 {
     public class DownloadQueueItem
     {
@@ -19,7 +19,7 @@ namespace MediaDownloader
         public int ConcurrentFragments { get; set; }
         public string BadgeLabel { get; set; }
         public string OutputFolder { get; set; }
-        public string TemporaryFolder { get; private set; }
+        public string TemporaryFolder { get; internal set; }
         public string CustomBaseFileName { get; set; }
         public QueueItemStatus Status { get; internal set; }
         public string StatusText { get; internal set; }
@@ -29,6 +29,10 @@ namespace MediaDownloader
         public string OutputFilePath { get; internal set; }
         public CompletedDownloadDetails CompletedDetails { get; internal set; }
         public bool MetadataResolved { get; set; }
+        // Source video id when already known (for example from a playlist listing).
+        public string SourceId { get; set; }
+        internal FileNameStyle FileNameStyle { get; set; }
+        internal string Uploader { get; set; }
         public DownloadFailure Failure { get; internal set; }
         internal string ErrorOutput = "";
         public List<string> TrackedFilePaths { get; set; }

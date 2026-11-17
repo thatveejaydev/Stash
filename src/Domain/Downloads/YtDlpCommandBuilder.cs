@@ -2,7 +2,7 @@
 using System.IO;
 using System.Text;
 
-namespace MediaDownloader
+namespace Stash
 {
     public static class YtDlpCommandBuilder
     {
@@ -80,6 +80,30 @@ namespace MediaDownloader
             return "--cookies-from-browser " + browser.ToString().ToLowerInvariant() + " ";
         }
 
+        // Prints title, id and uploader on separate lines.
+        internal static string BuildMetadataArguments(DownloadQueueItem item)
+        {
+            return BuildBrowserCookieArguments(item.BrowserCookies) +
+                "--no-playlist --skip-download --no-warnings --print \"%(title)s\" --print \"%(id)s\" --print \"%(uploader,channel|NA)s\" " +
+                CommandLine.Quote(item.Url);
+        }
+
+        internal static string BuildBaseFileName(FileNameStyle style, string title, string id, string uploader)
+        {
+            string cleanTitle = StorageFileService.SanitizeFileName(title);
+            if (style == FileNameStyle.TitleWithId && !string.IsNullOrWhiteSpace(id) && !string.IsNullOrEmpty(cleanTitle))
+            {
+                // Keep the id suffix even when a long title has to be shortened.
+                string suffix = " [" + StorageFileService.SanitizeFileName(id) + "]";
+                int room = Math.Max(1, StorageFileService.MaxSafeBaseFileNameLength - suffix.Length);
+                if (cleanTitle.Length > room) cleanTitle = cleanTitle.Substring(0, room).TrimEnd(' ', '.');
+                return cleanTitle + suffix;
+            }
+            if (style == FileNameStyle.UploaderAndTitle && !string.IsNullOrWhiteSpace(uploader) && uploader.Trim() != "NA" && !string.IsNullOrEmpty(cleanTitle))
+                return StorageFileService.SanitizeFileName(uploader.Trim() + " - " + title);
+            return cleanTitle;
+        }
+
         public static string BuildArguments(DownloadQueueItem item, string ffmpegPath)
         {
             string safeCustomName = !string.IsNullOrEmpty(item.CustomBaseFileName)
@@ -92,7 +116,8 @@ namespace MediaDownloader
 
             StringBuilder args = new StringBuilder();
             args.Append(BuildBrowserCookieArguments(item.BrowserCookies));
-            args.AppendFormat("--paths \"home:{0}\" --paths \"temp:{1}\" --print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ", Path.GetFullPath(item.OutputFolder), item.TemporaryFolder);
+            args.Append("--paths " + CommandLine.Quote("home:" + Path.GetFullPath(item.OutputFolder)) + " --paths " + CommandLine.Quote("temp:" + item.TemporaryFolder) + " ");
+            args.Append("--print \"after_move:STASH_FINAL:%(filepath)s\" --no-simulate ");
             args.Append("--print \"after_move:STASH_MEDIA:%(duration)s|%(width)s|%(height)s|%(fps)s|%(ext)s\" ");
             args.Append("--print \"before_dl:STASH_THUMBNAIL:%(thumbnail)s\" ");
             args.Append("--newline --no-colors --progress --no-playlist --continue --windows-filenames --trim-filenames 120 ");
@@ -107,7 +132,7 @@ namespace MediaDownloader
             if (!string.IsNullOrEmpty(ffmpegPath) && File.Exists(ffmpegPath))
             {
                 string ffmpegDir = Path.GetDirectoryName(ffmpegPath);
-                args.AppendFormat("--ffmpeg-location \"{0}\" ", ffmpegDir);
+                args.Append("--ffmpeg-location " + CommandLine.Quote(ffmpegDir) + " ");
             }
 
             int heightCap = GetResolutionHeightCap(item.Resolution);
@@ -178,7 +203,7 @@ namespace MediaDownloader
                 args.Append("--embed-thumbnail --convert-thumbnails jpg ");
             }
 
-            args.AppendFormat("-o \"{0}\" ", outputTemplate);
+            args.Append("-o " + CommandLine.Quote(outputTemplate) + " ");
 
             // Soft subtitles: embedded as toggleable tracks (not burned in). Video containers only.
             bool isVideoMode = (item.Mode == DownloadMode.BestVideoAndAudioMp4 || item.Mode == DownloadMode.BestVideoAndAudioMkv);
@@ -196,7 +221,7 @@ namespace MediaDownloader
                 args.Append("--ignore-errors ");
             }
 
-            args.AppendFormat("\"{0}\"", item.Url.Replace("\"", ""));
+            args.Append(CommandLine.Quote(item.Url));
 
             return args.ToString();
         }

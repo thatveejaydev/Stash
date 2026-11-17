@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public sealed class AppInformationDialog : ThemedForm
     {
@@ -20,17 +20,17 @@ namespace MediaDownloader
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = false; MaximizeBox = false; ShowInTaskbar = false;
-            Font = new Font("Segoe UI", 9.5F);
+            Font = Theme.GetFont("Segoe UI", 9.5F);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
             Label title = new Label { Text = "Stash", AutoSize = true, Location = new Point(Dpi.Px(24), Dpi.Px(20)),
-                Font = new Font("Segoe UI Semibold", 20F, FontStyle.Bold) };
+                Font = Theme.GetFont("Segoe UI Semibold", 20F, FontStyle.Bold) };
             Label version = new Label { Text = "Version " + UpdateService.InstalledVersion,
                 AutoSize = true, Location = new Point(Dpi.Px(26), Dpi.Px(64)), ForeColor = Theme.TextMuted };
             Label starPrompt = new Label { Text = "Give a star on GitHub", AutoSize = false,
                 Location = new Point(Dpi.Px(284), Dpi.Px(45)), Size = new Size(Dpi.Px(180), Dpi.Px(34)),
                 TextAlign = ContentAlignment.MiddleRight, ForeColor = Theme.TextMuted,
-                Font = new Font("Segoe UI", 9F) };
+                Font = Theme.GetFont("Segoe UI", 9F) };
             ModernButton repository = new StarIconButton
             {
                 BaseColor = Theme.BgTopBar, HoverColor = Theme.BgSurfaceHover,
@@ -43,7 +43,7 @@ namespace MediaDownloader
             repository.Click += (s, e) =>
             {
                 try { Process.Start("https://github.com/thatveejaydev/Stash"); }
-                catch { }
+                catch (Exception ex) { AppLog.Error("Could not open link", ex); }
             };
             CardPanel card = new CardPanel { Location = new Point(Dpi.Px(24), Dpi.Px(100)),
                 Size = new Size(Dpi.Px(482), Dpi.Px(96)), Padding = new Padding(Dpi.Px(16)) };
@@ -68,7 +68,7 @@ namespace MediaDownloader
             {
                 string url = SelectedUpdate != null && !string.IsNullOrWhiteSpace(SelectedUpdate.ReleaseUrl)
                     ? SelectedUpdate.ReleaseUrl : "https://github.com/thatveejaydev/Stash/releases/tag/v" + UpdateService.InstalledVersion;
-                try { Process.Start(url); } catch { }
+                try { Process.Start(url); } catch (Exception ex) { AppLog.Error("Could not open link", ex); }
             };
             check.Click += async (s, e) =>
             {
@@ -103,7 +103,7 @@ namespace MediaDownloader
         private static ModernButton CreateButton(string text, int width, bool primary)
         {
             return new ModernButton { Text = text, Size = new Size(Dpi.Px(width), Dpi.Px(36)),
-                Margin = new Padding(Dpi.Px(8), 0, 0, 0), Font = new Font("Segoe UI Semibold", 9F), CornerRadius = Dpi.Px(8),
+                Margin = new Padding(Dpi.Px(8), 0, 0, 0), Font = Theme.GetFont("Segoe UI Semibold", 9F), CornerRadius = Dpi.Px(8),
                 BaseColor = primary ? Theme.BrandPurple : Theme.BgTopBar,
                 HoverColor = primary ? Theme.BrandPurpleHover : Theme.BgSurfaceHover,
                 BorderColor = primary ? Color.Empty : Theme.BorderSubtle };

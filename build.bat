@@ -16,9 +16,12 @@ if not exist "%CSC%" (
         /win32icon:"%~dp0src\app.ico" ^
         /win32manifest:"%~dp0src\app.manifest" ^
         /optimize+ ^
+        /codepage:65001 ^
         /r:System.dll ^
         /r:System.Core.dll ^
         /r:System.Drawing.dll ^
+        /r:System.IO.Compression.dll ^
+        /r:System.IO.Compression.FileSystem.dll ^
         /r:System.Web.Extensions.dll ^
         /r:System.Windows.Forms.dll ^
         /recurse:"%~dp0src\*.cs"
@@ -26,6 +29,16 @@ if not exist "%CSC%" (
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Compilation failed!
     exit /b %ERRORLEVEL%
+)
+
+rem Optional code signing: set STASH_SIGN_PFX (and STASH_SIGN_PASSWORD) to sign the EXE.
+rem Once a release is signed, the updater only accepts updates signed by the same publisher.
+if defined STASH_SIGN_PFX (
+    signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "%STASH_SIGN_PFX%" /p "%STASH_SIGN_PASSWORD%" "%~dp0Stash.exe"
+    if errorlevel 1 (
+        echo [ERROR] Code signing failed!
+        exit /b 1
+    )
 )
 
 set "STASH_HASH="

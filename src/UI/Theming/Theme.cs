@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Modern Palette Constants (Purple Primary Accent)
     internal static class Theme
@@ -29,6 +31,36 @@ namespace MediaDownloader
         public static readonly Color AccentWarning = Color.FromArgb(245, 158, 11);
         public static readonly Color AccentDanger = Color.FromArgb(239, 68, 68);
         public static readonly Color AccentPurple = Color.FromArgb(168, 85, 247);
+
+        private static readonly Dictionary<string, Font> fonts = new Dictionary<string, Font>();
+
+        // Shared, never-disposed fonts. Callers must not dispose the returned instance.
+        public static Font GetFont(string family, float size, FontStyle style = FontStyle.Regular)
+        {
+            string key = family + "|" + size.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + (int)style;
+            lock (fonts)
+            {
+                Font font;
+                if (!fonts.TryGetValue(key, out font))
+                {
+                    font = new Font(family, size, style);
+                    fonts.Add(key, font);
+                }
+                return font;
+            }
+        }
+
+        // Draws the standard bordered surface used by popup panels.
+        public static Panel CreatePopupPanel(int width, int height)
+        {
+            Panel panel = new Panel { BackColor = BgSurface, Width = width, Height = height };
+            panel.Paint += (s, e) =>
+            {
+                using (Pen p = new Pen(BorderHover, 1f))
+                    e.Graphics.DrawRectangle(p, 0, 0, panel.Width - Dpi.Px(1), panel.Height - Dpi.Px(1));
+            };
+            return panel;
+        }
 
         public static GraphicsPath CreateRoundedRectangle(Rectangle rect, int radius)
         {

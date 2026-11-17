@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Modern Dark Dialog to Prompt for Renaming When a Similar Filename Exists
     public class RenamePromptDialog : ThemedForm
@@ -20,7 +20,7 @@ namespace MediaDownloader
             MaximizeBox = false;
             MinimizeBox = false;
             BackColor = Theme.BgTopBar;
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
+            Font = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
             Padding = new Padding(Dpi.Px(18));
 
             try
@@ -35,7 +35,7 @@ namespace MediaDownloader
                 Text = "File already exists",
                 Location = new Point(Dpi.Px(72), Dpi.Px(22)),
                 AutoSize = true,
-                Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 11F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary
             };
 
@@ -45,7 +45,7 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(12), Dpi.Px(37)),
                 Size = new Size(Dpi.Px(626), Dpi.Px(22)),
                 AutoEllipsis = true,
-                Font = new Font("Segoe UI", 9F),
+                Font = Theme.GetFont("Segoe UI", 9F),
                 ForeColor = Theme.TextPrimary,
                 BackColor = Theme.BgSurface,
                 UseMnemonic = false
@@ -57,7 +57,7 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(20), Dpi.Px(168)),
                 AutoSize = true,
                 ForeColor = Theme.TextPrimary,
-                Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold)
+                Font = Theme.GetFont("Segoe UI Semibold", 9.5F, FontStyle.Bold)
             };
 
             CardPanel pnlInput = new CardPanel
@@ -76,7 +76,7 @@ namespace MediaDownloader
                 BorderStyle = BorderStyle.None,
                 BackColor = Theme.BgInput,
                 ForeColor = Theme.TextPrimary,
-                Font = new Font("Segoe UI", 10F),
+                Font = Theme.GetFont("Segoe UI", 10F),
                 Text = suggestedNewBaseName,
                 AccessibleName = "Save as filename"
             };
@@ -91,7 +91,7 @@ namespace MediaDownloader
                 HoverColor = Theme.BgSurfaceHover,
                 BorderColor = Theme.BorderSubtle,
                 ForeColor = Theme.TextSecondary,
-                Font = new Font("Segoe UI", 9F)
+                Font = Theme.GetFont("Segoe UI", 9F)
             };
             btnCancel.Click += (s, e) =>
             {
@@ -106,7 +106,7 @@ namespace MediaDownloader
                 Size = new Size(Dpi.Px(141), Dpi.Px(40)),
                 BaseColor = Theme.BrandPurple,
                 HoverColor = Theme.BrandPurpleHover,
-                Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold)
+                Font = Theme.GetFont("Segoe UI Semibold", 9F, FontStyle.Bold)
             };
             btnSave.Click += (s, e) =>
             {
@@ -141,7 +141,7 @@ namespace MediaDownloader
             {
                 Text = "A file with a similar name was found in your download folder.",
                 Location = new Point(Dpi.Px(72), Dpi.Px(48)), Size = new Size(Dpi.Px(590), Dpi.Px(22)),
-                ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 9F)
+                ForeColor = Theme.TextSecondary, Font = Theme.GetFont("Segoe UI", 9F)
             });
             CardPanel existing = new CardPanel
             {
@@ -151,7 +151,7 @@ namespace MediaDownloader
             existing.Controls.Add(new Label
             {
                 Text = "EXISTING FILE", Location = new Point(Dpi.Px(12), Dpi.Px(12)), Size = new Size(Dpi.Px(620), Dpi.Px(18)),
-                Font = new Font("Segoe UI", 8F), ForeColor = Theme.TextSecondary, BackColor = Theme.BgSurface
+                Font = Theme.GetFont("Segoe UI", 8F), ForeColor = Theme.TextSecondary, BackColor = Theme.BgSurface
             });
             existing.Controls.Add(lblExisting);
             Controls.Add(existing);
@@ -159,7 +159,7 @@ namespace MediaDownloader
             {
                 Text = "The " + extension + " extension will be added automatically.",
                 Location = new Point(Dpi.Px(20), Dpi.Px(242)), Size = new Size(Dpi.Px(650), Dpi.Px(22)),
-                ForeColor = Theme.TextMuted, Font = new Font("Segoe UI", 8.5F)
+                ForeColor = Theme.TextMuted, Font = Theme.GetFont("Segoe UI", 8.5F)
             });
             Controls.Add(new Panel { Location = new Point(Dpi.Px(20), Dpi.Px(278)), Size = new Size(Dpi.Px(650), Dpi.Px(1)), BackColor = Theme.BorderSubtle });
             Controls.Add(lblPrompt);

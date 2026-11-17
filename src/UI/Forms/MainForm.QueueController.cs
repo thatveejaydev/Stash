@@ -1,97 +1,112 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public partial class MainForm
     {
+        private enum InputSource { Paste, Drop, ClipboardWatch }
+
         private void PasteFromClipboardAndDownload()
         {
-            if (!Clipboard.ContainsText())
+            string rawInput = ReadClipboardText();
+            if (rawInput == null)
             {
-                MessageBox.Show(
-                    "Your clipboard is empty. Copy a video, audio, or playlist link first, then click 'Paste Link' or press Ctrl+V.",
-                    "No Link in Clipboard",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                MessageBox.Show(this,
+                    "Your clipboard is empty or busy. Copy a video, audio, or playlist link first, then click 'Paste Link' or press Ctrl+V.",
+                    "No Link in Clipboard", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            ProcessInputText(rawInput, InputSource.Paste);
+        }
 
-            string rawInput = Clipboard.GetText();
-            if (string.IsNullOrWhiteSpace(rawInput)) return;
+        // Another application can hold the clipboard open briefly; retry instead of crashing.
+        private static string ReadClipboardText()
+        {
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    if (!Clipboard.ContainsText()) return null;
+                    string text = Clipboard.GetText();
+                    return string.IsNullOrWhiteSpace(text) ? null : text;
+                }
+                catch (ExternalException)
+                {
+                    System.Threading.Thread.Sleep(40);
+                }
+            }
+            return null;
+        }
 
+        private void ProcessInputText(string rawInput, InputSource source)
+        {
+            bool silent = source == InputSource.ClipboardWatch;
             List<string> extractedUrls = DownloadUrlValidator.ExtractUrls(rawInput);
             if (extractedUrls.Count == 0)
             {
-                MessageBox.Show(
-                    "Please copy a valid video, audio, or playlist link starting with http:// or https://, then try again.",
-                    "Invalid Link",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                if (!silent)
+                    MessageBox.Show(this,
+                        "Please use a valid video, audio, or playlist link starting with http:// or https://, then try again.",
+                        "Invalid Link", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             if (!File.Exists(ytDlpPath) || !File.Exists(ffmpegPath))
             {
-                DialogResult dr = MessageBox.Show(
-                    "yt-dlp.exe and/or ffmpeg.exe are not installed yet.\n\nWould you like to automatically download and install them right now?",
-                    "Install Required Dependencies",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
-
-                if (dr == DialogResult.Yes)
+                if (engineOperationRunning)
                 {
-                    BtnInstallTools_Click(this, EventArgs.Empty);
+                    ShowNotice("Engines are still installing. Add the link again when they are ready.");
+                    return;
                 }
+                if (silent) return;
+                DialogResult dr = MessageBox.Show(this,
+                    "yt-dlp.exe and/or ffmpeg.exe are not installed yet.\n\nWould you like to automatically download and install them right now?",
+                    "Install Required Dependencies", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (dr == DialogResult.Yes) RunEngineOperationAsync(false);
                 return;
             }
 
-            // Single link that is a playlist
-            if (extractedUrls.Count == 1 && DownloadUrlValidator.IsPlaylistUrl(extractedUrls[0]))
+            List<string> singles = new List<string>();
+            List<string> playlists = new List<string>();
+            foreach (string url in extractedUrls)
             {
-                using (PlaylistPromptDialog dlg = new PlaylistPromptDialog(extractedUrls[0], ytDlpPath, settings.BrowserCookies))
+                string singleUrl, videoId;
+                if (!DownloadUrlValidator.IsPlaylistUrl(url)) singles.Add(url);
+                else if (extractedUrls.Count > 1 && url.IndexOf("list=", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    DownloadUrlValidator.TryExtractSingleVideoUrl(url, out singleUrl, out videoId))
+                    singles.Add(singleUrl); // A watched video inside a playlist, pasted among other links.
+                else playlists.Add(url);
+            }
+
+            if (singles.Count > 0) QueueUrls(singles, null, null);
+
+            // Each playlist or channel gets its own picker instead of being downloaded as one item.
+            foreach (string playlist in playlists)
+            {
+                if (silent) { Activate(); }
+                using (PlaylistPromptDialog dlg = new PlaylistPromptDialog(playlist, ytDlpPath, settings.BrowserCookies))
                 {
                     if (dlg.ShowDialog(this) == DialogResult.OK)
-                    {
-                        QueueUrls(dlg.ResultUrls, dlg.ResultTitles);
-                    }
+                        QueueUrls(dlg.ResultUrls, dlg.ResultTitles, dlg.ResultIds);
                 }
-                return;
-            }
-
-            // Multiple links (Batch Paste)
-            if (extractedUrls.Count > 1)
-            {
-                List<string> sanitizedBatch = new List<string>();
-                foreach (string u in extractedUrls)
-                {
-                    string singleUrl;
-                    string videoId;
-                    if (DownloadUrlValidator.TryExtractSingleVideoUrl(u, out singleUrl, out videoId)
-                        && u.IndexOf("list=", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        sanitizedBatch.Add(singleUrl);
-                    }
-                    else
-                    {
-                        sanitizedBatch.Add(u);
-                    }
-                }
-                QueueUrls(sanitizedBatch);
-            }
-            else
-            {
-                QueueUrls(extractedUrls);
             }
         }
 
-        private void QueueUrls(IList<string> urls, IList<string> preResolvedTitles = null)
+        private bool IsAlreadyQueued(string url)
+        {
+            foreach (DownloadQueueItem item in downloadManager.GetItems())
+                if (DownloadManager.IsUnfinished(item.Status) && string.Equals(item.Url, url, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        private void QueueUrls(IList<string> urls, IList<string> preResolvedTitles, IList<string> sourceIds)
         {
             if (urls == null || urls.Count == 0) return;
 
@@ -104,7 +119,7 @@ namespace MediaDownloader
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Could not create output folder:\n" + ex.Message, "Invalid Folder", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(this, "Could not create output folder:\n" + ex.Message, "Invalid Folder", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
             }
@@ -120,14 +135,17 @@ namespace MediaDownloader
             bool isVideoMode = (mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv);
             if (isVideoMode && (settings.EmbedSubtitles || settings.IncludeAutoCaptions))
             {
-                badgeLabel += "   \u00B7   SUBS";
+                badgeLabel += "   ·   SUBS";
             }
 
             List<DownloadQueueItem> newItems = new List<DownloadQueueItem>();
+            HashSet<string> batch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int skipped = 0;
             for (int i = 0; i < urls.Count; i++)
             {
                 string u = urls[i];
                 if (string.IsNullOrWhiteSpace(u)) continue;
+                if (!batch.Add(u) || IsAlreadyQueued(u)) { skipped++; continue; }
 
                 DownloadQueueItem item = new DownloadQueueItem(
                     u,
@@ -142,6 +160,8 @@ namespace MediaDownloader
                 item.EmbedSubtitles = settings.EmbedSubtitles;
                 item.IncludeAutoCaptions = settings.IncludeAutoCaptions;
                 item.BrowserCookies = settings.BrowserCookies;
+                item.FileNameStyle = settings.FileNameStyle;
+                if (sourceIds != null && i < sourceIds.Count) item.SourceId = sourceIds[i];
 
                 if (preResolvedTitles != null && i < preResolvedTitles.Count && !string.IsNullOrWhiteSpace(preResolvedTitles[i]))
                 {
@@ -156,7 +176,11 @@ namespace MediaDownloader
                 newItems.Add(item);
             }
 
-            if (newItems.Count == 0) return;
+            if (newItems.Count == 0)
+            {
+                if (skipped > 0) ShowNotice(skipped == 1 ? "That link is already in the queue." : "Those links are already in the queue.");
+                return;
+            }
 
             downloadManager.AddItems(newItems);
 
@@ -169,12 +193,9 @@ namespace MediaDownloader
             }
             else
             {
-                AppendLog(string.Format("[Batch] Detected and queued {0} links from clipboard -> {1}", newItems.Count, outFolder));
-                for (int i = 0; i < newItems.Count; i++)
-                {
-                    AppendLog(string.Format("  [{0}/{1}] {2}", i + 1, newItems.Count, newItems[i].Title != newItems[i].Url ? newItems[i].Title : newItems[i].Url));
-                }
+                AppendLog(string.Format("[Batch] Detected and queued {0} links -> {1}", newItems.Count, outFolder));
             }
+            if (skipped > 0) ShowNotice(string.Format("{0} added; {1} already in the queue.", newItems.Count, skipped));
 
             ProcessQueue();
         }
@@ -189,50 +210,118 @@ namespace MediaDownloader
 
             List<DownloadQueueItem> queue = downloadManager.GetItems();
             int total = queue.Count;
-            int running = queue.FindAll(x => x.Status == QueueItemStatus.Downloading || x.Status == QueueItemStatus.Merging || x.Status == QueueItemStatus.FetchingInfo).Count;
-            int done = queue.FindAll(x => x.Status == QueueItemStatus.Completed).Count;
+            int running = 0, done = 0, failed = 0, paused = 0, waiting = 0;
+            double progress = 0;
+            foreach (DownloadQueueItem item in queue)
+            {
+                if (DownloadManager.IsActive(item.Status)) running++;
+                else if (item.Status == QueueItemStatus.Completed) done++;
+                else if (item.Status == QueueItemStatus.Error) failed++;
+                else if (item.Status == QueueItemStatus.Paused) paused++;
+                else if (item.Status == QueueItemStatus.Queued) waiting++;
+                if (DownloadManager.IsActive(item.Status) || item.Status == QueueItemStatus.Queued) progress += Math.Max(0, Math.Min(100, item.ProgressPercent));
+            }
 
             if (running > 0)
                 lblQueueStats.Text = string.Format("QUEUE  •  {0} ACTIVE  •  {1} OF {2} COMPLETED", running, done, total);
             else
                 lblQueueStats.Text = string.Format("QUEUE  •  {0} ITEMS  ({1} COMPLETED)", total, done);
+
+            btnPauseAll.Text = running + waiting == 0 && paused > 0 ? "Resume All" : "Pause All";
+            btnPauseAll.Enabled = running + waiting + paused > 0;
+            UpdateSelectionButtons();
+
+            int busy = running + waiting;
+            IntPtr window = IsHandleCreated ? Handle : IntPtr.Zero;
+            if (busy > 0) taskbar.SetProgress(window, progress / busy / 100.0, failed > 0);
+            else taskbar.Clear(window);
+
+            if (busy > 0) queueWasBusy = true;
+            else if (queueWasBusy)
+            {
+                queueWasBusy = false;
+                NotifyQueueFinished(done, failed, paused);
+            }
+        }
+
+        private void UpdateSelectionButtons()
+        {
+            DownloadQueueItem selected = queueListView.SelectedItem;
+            btnCancelSelected.Enabled = selected != null && DownloadManager.CanCancel(selected.Status);
+        }
+
+        private void NotifyQueueFinished(int completed, int failed, int paused)
+        {
+            if (completed == 0 && failed == 0) return;
+            if (ContainsFocus && WindowState != FormWindowState.Minimized) return;
+            if (trayIcon == null)
+            {
+                trayIcon = new NotifyIcon { Icon = Icon, Text = "Stash" };
+                trayIcon.BalloonTipClicked += (s, e) => RestoreFromNotification();
+                trayIcon.Click += (s, e) => RestoreFromNotification();
+            }
+            trayIcon.Visible = true;
+            string message = failed == 0
+                ? string.Format("{0} download{1} finished.", completed, completed == 1 ? "" : "s")
+                : string.Format("{0} finished, {1} failed.", completed, failed);
+            if (paused > 0) message += string.Format(" {0} paused.", paused);
+            trayIcon.ShowBalloonTip(5000, "Stash", message, failed == 0 ? ToolTipIcon.Info : ToolTipIcon.Warning);
+            FlashWindow();
+        }
+
+        private void RestoreFromNotification()
+        {
+            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+            Activate();
+            if (trayIcon != null) trayIcon.Visible = false;
         }
 
         private void ProcessQueue()
         {
+            // Never start yt-dlp while the engines are being replaced.
+            if (engineOperationRunning || !File.Exists(ytDlpPath)) return;
             downloadManager.ProcessQueue(ytDlpPath, ffmpegPath, settings.ParallelCount);
         }
 
+        // Called before each download starts. Picks the file name and asks about duplicates,
+        // including other queued items that would write the same file.
         private bool CheckAndPromptForDuplicateRename(DownloadQueueItem item, string fetchedTitle, string fetchedId)
         {
-            string cleanTitle = StorageFileService.SanitizeFileName(fetchedTitle);
-            if (string.IsNullOrEmpty(cleanTitle)) return true;
+            string baseName = YtDlpCommandBuilder.BuildBaseFileName(item.FileNameStyle, fetchedTitle, fetchedId, item.Uploader);
+            if (string.IsNullOrEmpty(baseName)) return true;
 
-            string existingFile = StorageFileService.FindSimilarExistingFile(item.OutputFolder, cleanTitle, fetchedId);
+            string ext = YtDlpCommandBuilder.GetTargetExtension(item.Mode);
+            Func<string, bool> reserved = candidate => IsNameReservedByQueue(item, candidate, ext);
+            string existingFile = StorageFileService.FindSimilarExistingFile(item.OutputFolder, baseName,
+                item.FileNameStyle == FileNameStyle.TitleWithId ? null : fetchedId);
+            if (existingFile == null && reserved(baseName)) existingFile = baseName + ext + "  (queued in Stash)";
             if (existingFile == null)
             {
-                item.CustomBaseFileName = cleanTitle;
+                item.CustomBaseFileName = baseName;
                 return true;
             }
 
-            string ext = YtDlpCommandBuilder.GetTargetExtension(item.Mode);
-            string suggested = StorageFileService.SuggestNextAvailableName(item.OutputFolder, cleanTitle, ext);
-
-            bool accepted = false;
-            Invoke((Action)(() =>
+            string suggested = StorageFileService.SuggestNextAvailableName(item.OutputFolder, baseName, ext, reserved);
+            using (RenamePromptDialog dlg = new RenamePromptDialog(existingFile, suggested, ext))
             {
-                using (RenamePromptDialog dlg = new RenamePromptDialog(existingFile, suggested, ext))
-                {
-                    if (dlg.ShowDialog(this) == DialogResult.OK)
-                    {
-                        item.CustomBaseFileName = dlg.ChosenBaseName;
-                        item.Title = dlg.ChosenBaseName;
-                        accepted = true;
-                    }
-                }
-            }));
+                if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+                item.CustomBaseFileName = dlg.ChosenBaseName;
+                item.Title = dlg.ChosenBaseName;
+                return true;
+            }
+        }
 
-            return accepted;
+        private bool IsNameReservedByQueue(DownloadQueueItem current, string baseName, string ext)
+        {
+            foreach (DownloadQueueItem other in downloadManager.GetItems())
+            {
+                if (other == current || !DownloadManager.IsUnfinished(other.Status)) continue;
+                if (!string.Equals(other.CustomBaseFileName, baseName, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(YtDlpCommandBuilder.GetTargetExtension(other.Mode), ext, StringComparison.OrdinalIgnoreCase)) continue;
+                if (StorageFileService.SameDirectory(other.OutputFolder, current.OutputFolder)) return true;
+            }
+            return false;
         }
 
         private void TogglePauseResumeItem(DownloadQueueItem item)
@@ -242,7 +331,19 @@ namespace MediaDownloader
 
         private void CancelSingleItem(DownloadQueueItem item)
         {
+            if (item == null) return;
             downloadManager.Cancel(item);
+        }
+
+        private void BtnPauseAll_Click(object sender, EventArgs e)
+        {
+            if (btnPauseAll.Text == "Resume All")
+            {
+                downloadManager.ResumeAll();
+                ProcessQueue();
+            }
+            else downloadManager.PauseAll();
+            UpdateQueueHeaderStats();
         }
 
         private void OpenCompletedItemFolder(DownloadQueueItem item)
@@ -252,14 +353,48 @@ namespace MediaDownloader
             {
                 if (!string.IsNullOrEmpty(item.OutputFilePath) && File.Exists(item.OutputFilePath))
                 {
-                    Process.Start("explorer.exe", "/select,\"" + item.OutputFilePath + "\"");
+                    Process.Start("explorer.exe", "/select," + CommandLine.Quote(item.OutputFilePath));
                 }
                 else if (Directory.Exists(item.OutputFolder))
                 {
-                    Process.Start("explorer.exe", item.OutputFolder);
+                    Process.Start("explorer.exe", CommandLine.Quote(item.OutputFolder));
                 }
+                else ShowNotice("The download folder no longer exists.");
             }
-            catch { }
+            catch (Exception ex) { AppLog.Error("Could not open folder", ex); }
+        }
+
+        private void OpenCompletedFile(DownloadQueueItem item)
+        {
+            if (item == null) return;
+            if (string.IsNullOrEmpty(item.OutputFilePath) || !File.Exists(item.OutputFilePath))
+            {
+                ShowNotice("The downloaded file was moved or deleted.");
+                return;
+            }
+            try { Process.Start(new ProcessStartInfo(item.OutputFilePath) { UseShellExecute = true }); }
+            catch (Exception ex)
+            {
+                AppLog.Error("Could not open file", ex);
+                OpenCompletedItemFolder(item);
+            }
+        }
+
+        private void CopyItemUrl(DownloadQueueItem item)
+        {
+            if (item == null) return;
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    ignoreClipboardText = item.Url;
+                    Clipboard.SetText(item.Url);
+                    ShowNotice("Link copied.");
+                    return;
+                }
+                catch (ExternalException) { System.Threading.Thread.Sleep(40); }
+            }
+            ShowNotice("The clipboard is busy. Try again.");
         }
 
         private void BtnCancelSelected_Click(object sender, EventArgs e)
@@ -298,17 +433,23 @@ namespace MediaDownloader
             string notification = null;
             if (message.StartsWith("[Queue]")) notification = "Link added to the queue.";
             if (message.StartsWith("[Batch]")) notification = "Links added to the queue.";
-            if (message.StartsWith("FFmpeg ready")) notification = "Download engines installed.";
-            if (notification != null && !IsDisposed && IsHandleCreated)
-            {
-                string text = notification;
-                BeginInvoke((Action)(() =>
-                {
-                    if (IsDisposed || notice == null) return;
-                    notice.Text = text; notice.Visible = true;
-                    noticeTimer.Stop(); noticeTimer.Start();
-                }));
-            }
+            if (notification != null) ShowNotice(notification);
+        }
+
+        private void ShowNotice(string text)
+        {
+            if (IsDisposed || !IsHandleCreated || notice == null) return;
+            if (InvokeRequired) { BeginInvoke((Action<string>)ShowNotice, text); return; }
+            notice.Text = text;
+            notice.Visible = true;
+            noticeTimer.Stop();
+            noticeTimer.Start();
+        }
+
+        private void SaveQueue()
+        {
+            try { queueStore.Save(downloadManager.GetItems()); }
+            catch (Exception ex) { AppLog.Error("Could not save the queue", ex); }
         }
 
         protected override async void OnFormClosing(FormClosingEventArgs e)
@@ -317,17 +458,39 @@ namespace MediaDownloader
             if (e.Cancel || shutdownComplete) return;
             e.Cancel = true;
             if (!Enabled) return;
+
+            ShutdownMode mode = ShutdownMode.PauseForResume;
+            int unfinished = downloadManager.GetItems().FindAll(item => DownloadManager.IsUnfinished(item.Status)).Count;
+            int active = downloadManager.GetItems().FindAll(item => DownloadManager.IsActive(item.Status) || item.Status == QueueItemStatus.Queued).Count;
+            if (active > 0 && e.CloseReason == CloseReason.UserClosing)
+            {
+                using (CloseConfirmationDialog dialog = new CloseConfirmationDialog(active, unfinished))
+                {
+                    DialogResult choice = dialog.ShowDialog(this);
+                    if (choice == DialogResult.Cancel) return;
+                    mode = choice == DialogResult.Abort ? ShutdownMode.DiscardAll : ShutdownMode.PauseForResume;
+                }
+            }
+
             Enabled = false;
             progressRefreshTimer.Stop();
+            engineCancellation.Cancel();
             settings.Save();
-            await downloadManager.ShutdownAsync();
+            Task shutdown = downloadManager.ShutdownAsync(mode);
+            // Never leave the window hanging if an engine process refuses to exit.
+            await Task.WhenAny(shutdown, Task.Delay(15000));
+            if (!shutdown.IsCompleted) AppLog.Error("Shutdown timed out waiting for download processes.");
+            SaveQueue();
             shutdownComplete = true;
             Close();
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            if (clipboardListening) RemoveClipboardFormatListener(Handle);
+            if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
             progressRefreshTimer.Dispose();
+            AppLog.Connect(null);
             logWriter.Dispose();
             noticeTimer.Dispose();
             base.OnFormClosed(e);

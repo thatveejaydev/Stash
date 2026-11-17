@@ -6,7 +6,7 @@ using System.Net;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public partial class MainForm
     {
@@ -38,7 +38,12 @@ namespace MediaDownloader
                 DropShadowEnabled = true
             };
             popup.Items.Add(host);
-            popup.Closed += (s, e) => ownerSelector.SetOpenState(false);
+            popup.Closed += (s, e) =>
+            {
+                ownerSelector.SetOpenState(false);
+                // Popups are rebuilt on every open; release the old one's window handles.
+                BeginInvoke((Action)popup.Dispose);
+            };
             ownerSelector.SetOpenState(true);
             int x = alignRight ? ownerSelector.Width - popup.Width : 0;
             popup.Show(ownerSelector, new Point(x, ownerSelector.Height + Dpi.Px(2)));
@@ -49,19 +54,7 @@ namespace MediaDownloader
         private void ShowFormatPopup()
         {
             int width = Dpi.Px(265);
-            Panel container = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Width = width,
-                Height = FormatPopupTitles.Length * Dpi.Px(34) + Dpi.Px(8)
-            };
-            container.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
-                }
-            };
+            Panel container = Theme.CreatePopupPanel(width, FormatPopupTitles.Length * Dpi.Px(34) + Dpi.Px(8));
 
             ToolStripDropDown popup = null;
             for (int i = 0; i < FormatPopupTitles.Length; i++)
@@ -89,19 +82,7 @@ namespace MediaDownloader
         private void ShowQualityPopup()
         {
             int width = Dpi.Px(245);
-            Panel container = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Width = width,
-                Height = QualityPopupTitles.Length * Dpi.Px(34) + Dpi.Px(8)
-            };
-            container.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
-                }
-            };
+            Panel container = Theme.CreatePopupPanel(width, QualityPopupTitles.Length * Dpi.Px(34) + Dpi.Px(8));
 
             ToolStripDropDown popup = null;
             for (int i = 0; i < QualityPopupTitles.Length; i++)
@@ -219,36 +200,54 @@ namespace MediaDownloader
 
         private static readonly CookieBrowser[] CookieBrowsers = (CookieBrowser[])Enum.GetValues(typeof(CookieBrowser));
 
+        private sealed class OptionsRow
+        {
+            public PopupMenuRow Row;
+            public Func<PopupMenuRow, Panel> BuildSubmenu;
+        }
+
         private void ShowOptionsNestedPopup()
         {
-            int leftWidth = Dpi.Px(225);
-            int leftHeight = 4 * Dpi.Px(34) + Dpi.Px(8);
+            int rowStep = Dpi.Px(34);
             int gap = Dpi.Px(4);
+            int leftWidth = Dpi.Px(225);
             int rightMaxWidth = Dpi.Px(250);
-            int totalWidth = leftWidth + gap + rightMaxWidth;
-            int totalHeight = Dpi.Px(102) + 6 * Dpi.Px(46) + Dpi.Px(24);
+
+            List<OptionsRow> rows = new List<OptionsRow>();
+            Action<string, string, Func<PopupMenuRow, Panel>> addRow = (title, badge, build) =>
+            {
+                PopupMenuRow row = new PopupMenuRow(title, badge + "   ◂", null, false, "")
+                {
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + rows.Count * rowStep),
+                    Width = leftWidth - Dpi.Px(8)
+                };
+                rows.Add(new OptionsRow { Row = row, BuildSubmenu = build });
+            };
+            addRow("Subtitles", GetSubtitlesShortDisplayName(), BuildSubtitlesSubmenuPanel);
+            addRow("Embed", GetEmbedShortDisplayName(), BuildEmbedSubmenuPanel);
+            addRow("Parallel", settings.ParallelCount + (settings.ParallelCount == 1 ? " Download" : " Downloads"), BuildParallelSubmenuPanel);
+            addRow("Turbo", settings.ConcurrentFragments + "x", BuildTurboSubmenuPanel);
+            addRow("File name", GetFileNameStyleShortName(settings.FileNameStyle), BuildFileNameSubmenuPanel);
+            addRow("Clipboard", settings.WatchClipboard ? "Watching" : "Off", BuildClipboardSubmenuPanel);
+
+            int leftHeight = rows.Count * rowStep + Dpi.Px(8);
+            // Tallest submenu decides the popup height: each opens aligned with its row.
+            int totalHeight = leftHeight;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                using (Panel probe = rows[i].BuildSubmenu(rows[i].Row))
+                    totalHeight = Math.Max(totalHeight, i * rowStep + probe.Height);
+            }
 
             Panel rootContainer = new Panel
             {
                 BackColor = Theme.BgWindow,
-                Width = totalWidth,
+                Width = leftWidth + gap + rightMaxWidth,
                 Height = totalHeight
             };
 
-            Panel pnlLeft = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Location = new Point(rightMaxWidth + gap, 0),
-                Width = leftWidth,
-                Height = leftHeight
-            };
-            pnlLeft.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, pnlLeft.Width - Dpi.Px(1), pnlLeft.Height - Dpi.Px(1));
-                }
-            };
+            Panel pnlLeft = Theme.CreatePopupPanel(leftWidth, leftHeight);
+            pnlLeft.Location = new Point(rightMaxWidth + gap, 0);
 
             Panel pnlRightHost = new Panel
             {
@@ -288,130 +287,122 @@ namespace MediaDownloader
                     if (bridge.Height > 0) reg.Union(bridge);
                     reg.Union(pnlRightHost.Bounds);
                 }
+                Region previous = popup.Region;
                 popup.Region = reg;
-            };
-
-            PopupMenuRow rowSubtitles = new PopupMenuRow(
-                "Subtitles",
-                GetSubtitlesShortDisplayName() + "   ◂",
-                null,
-                false,
-                "")
-            {
-                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
-                Width = leftWidth - Dpi.Px(8)
-            };
-
-            PopupMenuRow rowEmbed = new PopupMenuRow(
-                "Embed",
-                GetEmbedShortDisplayName() + "   ◂",
-                null,
-                false,
-                "")
-            {
-                Location = new Point(Dpi.Px(4), Dpi.Px(38)),
-                Width = leftWidth - Dpi.Px(8)
-            };
-
-            PopupMenuRow rowParallel = new PopupMenuRow(
-                "Parallel",
-                settings.ParallelCount + (settings.ParallelCount == 1 ? " Download   ◂" : " Downloads   ◂"),
-                null,
-                false,
-                "")
-            {
-                Location = new Point(Dpi.Px(4), Dpi.Px(72)),
-                Width = leftWidth - Dpi.Px(8)
-            };
-
-            PopupMenuRow rowTurbo = new PopupMenuRow(
-                "Turbo",
-                settings.ConcurrentFragments + "x   ◂",
-                null,
-                false,
-                "")
-            {
-                Location = new Point(Dpi.Px(4), Dpi.Px(106)),
-                Width = leftWidth - Dpi.Px(8)
+                if (previous != null) previous.Dispose();
             };
 
             int currentSubmenuIndex = -1;
-
-            Action<int, PopupMenuRow, Panel, int> showSubmenu = (index, ownerRow, childPanel, alignY) =>
+            for (int i = 0; i < rows.Count; i++)
             {
-                if (currentSubmenuIndex == index && pnlRightHost.Visible) return;
-                currentSubmenuIndex = index;
-
-                rowSubtitles.IsSelected = (ownerRow == rowSubtitles);
-                rowEmbed.IsSelected = (ownerRow == rowEmbed);
-                rowParallel.IsSelected = (ownerRow == rowParallel);
-                rowTurbo.IsSelected = (ownerRow == rowTurbo);
-                rowSubtitles.Invalidate();
-                rowEmbed.Invalidate();
-                rowParallel.Invalidate();
-                rowTurbo.Invalidate();
-
-                pnlRightHost.SuspendLayout();
-                pnlRightHost.Controls.Clear();
-                pnlRightHost.Location = new Point(pnlLeft.Left - gap - childPanel.Width, alignY);
-                pnlRightHost.Size = childPanel.Size;
-                childPanel.Location = Point.Empty;
-                pnlRightHost.Controls.Add(childPanel);
-                pnlRightHost.Visible = true;
-                pnlRightHost.ResumeLayout();
-
-                updatePopupRegion();
-            };
-
-            Action openSubtitles = () =>
-            {
-                Panel sub = BuildSubtitlesSubmenuPanel(rowSubtitles);
-                showSubmenu(0, rowSubtitles, sub, 0);
-            };
-
-            Action openEmbed = () =>
-            {
-                Panel sub = BuildEmbedSubmenuPanel(rowEmbed);
-                showSubmenu(1, rowEmbed, sub, Dpi.Px(34));
-            };
-
-            Action openParallel = () =>
-            {
-                Panel sub = BuildParallelSubmenuPanel(rowParallel);
-                showSubmenu(2, rowParallel, sub, Dpi.Px(68));
-            };
-
-            Action openTurbo = () =>
-            {
-                Panel sub = BuildTurboSubmenuPanel(rowTurbo);
-                showSubmenu(3, rowTurbo, sub, Dpi.Px(102));
-            };
-
-            rowSubtitles.MouseEnter += (s, e) => openSubtitles();
-            rowSubtitles.MouseDown += (s, e) => openSubtitles();
-
-            rowEmbed.MouseEnter += (s, e) => openEmbed();
-            rowEmbed.MouseDown += (s, e) => openEmbed();
-
-            rowParallel.MouseEnter += (s, e) => openParallel();
-            rowParallel.MouseDown += (s, e) => openParallel();
-
-            rowTurbo.MouseEnter += (s, e) => openTurbo();
-            rowTurbo.MouseDown += (s, e) => openTurbo();
-
-            pnlLeft.Controls.Add(rowSubtitles);
-            pnlLeft.Controls.Add(rowEmbed);
-            pnlLeft.Controls.Add(rowParallel);
-            pnlLeft.Controls.Add(rowTurbo);
+                int index = i;
+                OptionsRow option = rows[i];
+                Action open = () =>
+                {
+                    if (currentSubmenuIndex == index && pnlRightHost.Visible) return;
+                    currentSubmenuIndex = index;
+                    foreach (OptionsRow other in rows)
+                    {
+                        other.Row.IsSelected = other == option;
+                        other.Row.Invalidate();
+                    }
+                    Panel childPanel = option.BuildSubmenu(option.Row);
+                    pnlRightHost.SuspendLayout();
+                    // Dispose the previous submenu instead of leaking its handles.
+                    List<Control> old = new List<Control>();
+                    foreach (Control c in pnlRightHost.Controls) old.Add(c);
+                    pnlRightHost.Controls.Clear();
+                    foreach (Control c in old) c.Dispose();
+                    pnlRightHost.Location = new Point(pnlLeft.Left - gap - childPanel.Width, index * rowStep);
+                    pnlRightHost.Size = childPanel.Size;
+                    childPanel.Location = Point.Empty;
+                    pnlRightHost.Controls.Add(childPanel);
+                    pnlRightHost.Visible = true;
+                    pnlRightHost.ResumeLayout();
+                    updatePopupRegion();
+                };
+                option.Row.MouseEnter += (s, e) => open();
+                option.Row.MouseDown += (s, e) => open();
+                pnlLeft.Controls.Add(option.Row);
+            }
 
             rootContainer.Controls.Add(pnlLeft);
             rootContainer.Controls.Add(pnlRightHost);
 
             updatePopupRegion();
 
-            popup.Closed += (s, e) => selOptions.SetOpenState(false);
+            popup.Closed += (s, e) =>
+            {
+                selOptions.SetOpenState(false);
+                BeginInvoke((Action)popup.Dispose);
+            };
             selOptions.SetOpenState(true);
             popup.Show(selOptions, new Point(selOptions.Width - popup.Width, selOptions.Height + Dpi.Px(2)));
+        }
+
+        private static string GetFileNameStyleShortName(FileNameStyle style)
+        {
+            switch (style)
+            {
+                case FileNameStyle.TitleWithId: return "Title [ID]";
+                case FileNameStyle.UploaderAndTitle: return "Channel - Title";
+                default: return "Title";
+            }
+        }
+
+        private Panel BuildFileNameSubmenuPanel(PopupMenuRow parentRow)
+        {
+            int width = Dpi.Px(250);
+            int rowH = Dpi.Px(46);
+            FileNameStyle[] styles = { FileNameStyle.Title, FileNameStyle.TitleWithId, FileNameStyle.UploaderAndTitle };
+            string[] examples = { "My Video.mp4", "My Video [dQw4w9WgXcQ].mp4", "Channel Name - My Video.mp4" };
+            Panel container = Theme.CreatePopupPanel(width, styles.Length * rowH + Dpi.Px(8));
+            for (int i = 0; i < styles.Length; i++)
+            {
+                FileNameStyle style = styles[i];
+                PopupMenuRow row = new PopupMenuRow(GetFileNameStyleShortName(style), null, examples[i], style == settings.FileNameStyle)
+                {
+                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + i * rowH),
+                    Width = width - Dpi.Px(8)
+                };
+                row.MouseDown += (s, e) =>
+                {
+                    if (e.Button != MouseButtons.Left) return;
+                    settings.FileNameStyle = style;
+                    settings.Save();
+                    parentRow.RightBadgeText = GetFileNameStyleShortName(style) + "   ◂";
+                    parentRow.Invalidate();
+                    SelectSubmenuRow(container, row);
+                };
+                container.Controls.Add(row);
+            }
+            return container;
+        }
+
+        private Panel BuildClipboardSubmenuPanel(PopupMenuRow parentRow)
+        {
+            int width = Dpi.Px(250);
+            Panel container = Theme.CreatePopupPanel(width, Dpi.Px(46) + Dpi.Px(8));
+            PopupMenuRow row = new PopupMenuRow("Watch clipboard for links", null, "Queue links copied in other apps",
+                settings.WatchClipboard, settings.WatchClipboard ? "☑" : "☐")
+            {
+                Location = new Point(Dpi.Px(4), Dpi.Px(4)),
+                Width = width - Dpi.Px(8)
+            };
+            row.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Left) return;
+                settings.WatchClipboard = !settings.WatchClipboard;
+                settings.Save();
+                UpdateClipboardWatch();
+                row.IsSelected = settings.WatchClipboard;
+                row.CheckGlyph = settings.WatchClipboard ? "☑" : "☐";
+                row.Invalidate();
+                parentRow.RightBadgeText = (settings.WatchClipboard ? "Watching" : "Off") + "   ◂";
+                parentRow.Invalidate();
+            };
+            container.Controls.Add(row);
+            return container;
         }
 
         private void UpdateBrowserCookiesTooltip()
@@ -525,19 +516,7 @@ namespace MediaDownloader
         {
             int width = Dpi.Px(250);
             int rowH = Dpi.Px(46);
-            Panel container = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Width = width,
-                Height = 2 * rowH + Dpi.Px(8)
-            };
-            container.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
-                }
-            };
+            Panel container = Theme.CreatePopupPanel(width, 2 * rowH + Dpi.Px(8));
 
             PopupMenuRow rowSubs = new PopupMenuRow(
                 "Creator Subtitles",
@@ -591,19 +570,7 @@ namespace MediaDownloader
         private Panel BuildEmbedSubmenuPanel(PopupMenuRow parentRow)
         {
             int width = Dpi.Px(235);
-            Panel container = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Width = width,
-                Height = Dpi.Px(76)
-            };
-            container.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
-                }
-            };
+            Panel container = Theme.CreatePopupPanel(width, Dpi.Px(76));
 
             PopupMenuRow rowMeta = new PopupMenuRow(
                 "Metadata & Chapters",
@@ -658,19 +625,7 @@ namespace MediaDownloader
         {
             int width = Dpi.Px(190);
             int rowH = Dpi.Px(46);
-            Panel container = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Width = width,
-                Height = 6 * rowH + Dpi.Px(8)
-            };
-            container.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
-                }
-            };
+            Panel container = Theme.CreatePopupPanel(width, 6 * rowH + Dpi.Px(8));
 
             for (int n = 1; n <= 6; n++)
             {
@@ -720,19 +675,7 @@ namespace MediaDownloader
 
             int width = Dpi.Px(210);
             int rowH = Dpi.Px(46);
-            Panel container = new Panel
-            {
-                BackColor = Theme.BgSurface,
-                Width = width,
-                Height = counts.Length * rowH + Dpi.Px(8)
-            };
-            container.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(Theme.BorderHover, 1f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, container.Width - Dpi.Px(1), container.Height - Dpi.Px(1));
-                }
-            };
+            Panel container = Theme.CreatePopupPanel(width, counts.Length * rowH + Dpi.Px(8));
 
             for (int i = 0; i < counts.Length; i++)
             {

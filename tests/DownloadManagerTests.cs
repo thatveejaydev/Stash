@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaDownloader;
+using Stash;
 
 internal static class DownloadManagerTests
 {
@@ -177,7 +177,7 @@ internal static class DownloadManagerTests
         DownloadQueueItem item = Item(false);
         manager.AddItems(new[] { item });
         manager.ProcessQueue("fake", null, 1);
-        Assert(runner.Calls[0].Arguments.Contains("--get-title"), "Metadata must use the managed process runner");
+        Assert(runner.Calls[0].Arguments.Contains("--print \"%(title)s\"") && runner.Calls[0].Arguments.Contains("--skip-download"), "Metadata must use the managed process runner");
         manager.Cancel(item);
         Assert(runner.Calls[0].Token.IsCancellationRequested, "Cancel must also stop metadata lookup");
         runner.Calls[0].Result.SetCanceled();
@@ -202,6 +202,72 @@ internal static class DownloadManagerTests
         runner.Calls[0].Result.SetResult(0);
         await Until(() => item.Status == QueueItemStatus.Cancelled);
         Assert(prompts == 1 && runner.Calls.Count == 1, "Cancellation in the prompt must prevent process startup");
+        await manager.ShutdownAsync();
+    }
+
+    private static async Task BulkPauseAndRestartableShutdown()
+    {
+        FakeRunner runner = new FakeRunner();
+        DownloadManager manager = Manager(runner);
+        DownloadQueueItem first = Item(), second = Item(), third = Item();
+        manager.AddItems(new[] { first, second, third });
+        manager.ProcessQueue("fake", null, 1);
+        Assert(manager.PauseAll() == 3 && runner.Calls[0].Token.IsCancellationRequested, "Pause all stops the running item and holds queued ones");
+        runner.Calls[0].Result.SetCanceled();
+        await Until(() => first.Status == QueueItemStatus.Paused);
+        Assert(second.Status == QueueItemStatus.Paused && third.Status == QueueItemStatus.Paused && runner.Calls.Count == 1,
+            "Nothing new starts while everything is paused");
+        Assert(manager.ResumeAll() == 3 && runner.Calls.Count == 2, "Resume all respects the parallel limit");
+
+        // Closing with "Pause & Quit" keeps partial files for the next session.
+        string fragment = Path.Combine(first.TemporaryFolder, "keep.part");
+        File.WriteAllText(fragment, "partial");
+        Assert((File.GetAttributes(first.TemporaryFolder) & FileAttributes.Hidden) != 0, "Temporary folders are hidden");
+        Task shutdown = manager.ShutdownAsync(ShutdownMode.PauseForResume);
+        runner.Calls[1].Result.SetCanceled();
+        await shutdown;
+        Assert(first.Status == QueueItemStatus.Paused && File.Exists(fragment), "Restartable shutdown pauses and keeps partial data");
+
+        // "Cancel Downloads" removes partial files of idle items too.
+        runner = new FakeRunner();
+        manager = Manager(runner);
+        DownloadQueueItem idle = Item();
+        manager.AddRestoredItems(new[] { idle });
+        manager.TogglePauseResume(idle);
+        Assert(idle.Status == QueueItemStatus.Paused, "Restored items can be paused or resumed");
+        Directory.CreateDirectory(idle.TemporaryFolder);
+        File.WriteAllText(Path.Combine(idle.TemporaryFolder, "old.part"), "x");
+        await manager.ShutdownAsync(ShutdownMode.DiscardAll);
+        Assert(!Directory.Exists(idle.TemporaryFolder), "Discarding on exit deletes idle partial files");
+
+        // Titles known up front still go through the naming and duplicate check exactly once.
+        runner = new FakeRunner();
+        int prompts = 0;
+        manager = new DownloadManager(runner, (current, title, id) => { prompts++; current.CustomBaseFileName = title; return true; });
+        DownloadQueueItem playlistItem = Item();
+        playlistItem.Title = "Playlist entry";
+        playlistItem.SourceId = "abc123";
+        manager.AddItems(new[] { playlistItem });
+        manager.ProcessQueue("fake", null, 1);
+        Assert(prompts == 1 && runner.Calls.Count == 1 && runner.Calls[0].Arguments.Contains("Playlist entry.%(ext)s"),
+            "Pre-resolved titles are named through the confirmation callback");
+        runner.Calls[0].Result.SetResult(1);
+        await Until(() => playlistItem.Status == QueueItemStatus.Error);
+        Assert(!playlistItem.Failure.TechnicalDetails.Contains("   at "), "User-facing details never include stack traces");
+        manager.Retry(playlistItem);
+        Assert(prompts == 1, "Retry does not ask for the name again");
+        runner.Calls[1].Result.SetResult(0);
+        await Until(() => playlistItem.Status == QueueItemStatus.Completed);
+
+        // A failed metadata lookup is not repeated on every resume.
+        DownloadQueueItem unresolved = Item(false);
+        manager.AddItems(new[] { unresolved });
+        manager.ProcessQueue("fake", null, 1);
+        runner.Calls[2].Result.SetResult(1);
+        await Until(() => runner.Calls.Count == 4);
+        Assert(unresolved.MetadataResolved && !runner.Calls[3].Arguments.Contains("--skip-download"), "Empty metadata falls through to the download");
+        runner.Calls[3].Result.SetResult(0);
+        await Until(() => unresolved.Status == QueueItemStatus.Completed);
         await manager.ShutdownAsync();
     }
 
@@ -286,6 +352,8 @@ internal static class DownloadManagerTests
         await MetadataCancellationAndRename();
         Console.WriteLine("Shutdown and startup failure");
         await ShutdownAndStartupFailure();
+        Console.WriteLine("Bulk pause, resume and restartable shutdown");
+        await BulkPauseAndRestartableShutdown();
         Console.WriteLine("Real process ownership");
         await RealProcessOwnership();
     }
@@ -398,6 +466,7 @@ internal static class DownloadManagerTests
         AppDataStorageTests.Run(Path.Combine(testFolder, "storage"));
         ErrorFeatureTests.Run(Path.Combine(testFolder, "logs"));
         UpdateServiceTests.Run(Path.Combine(testFolder, "updates"));
+        RegressionTests.Run(Path.Combine(testFolder, "regressions"));
         CompletedDownloadDetails media = CompletedDownloadDetails.Parse("3661.5|1080|1920|29.97|mkv");
         Assert(media.GetSummary(DownloadMode.BestVideoAndAudioMkv) == "1:01:01   ·   MKV   ·   1080×1920 (Full HD)   ·   29.97 fps",
             "Completed metadata must support long durations, portrait resolution and fractional fps");

@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public class DarkScrollBar : Control
     {

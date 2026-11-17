@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Text;
 using System.Runtime.InteropServices;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Persistent Settings (Remembers Save-To Directory History & User Preferences)
     public class AppSettings
@@ -57,6 +58,9 @@ namespace MediaDownloader
         public bool EmbedSubtitles { get; set; }
         public bool IncludeAutoCaptions { get; set; }
         internal CookieBrowser BrowserCookies { get; set; }
+        internal FileNameStyle FileNameStyle { get; set; }
+        public bool WatchClipboard { get; set; }
+        public DateTime LastEngineCheckUtc { get; set; }
 
         private readonly string settingsPath;
 
@@ -81,7 +85,23 @@ namespace MediaDownloader
 
         public void AddFolderToHistory(string folder)
         {
-            if (string.IsNullOrWhiteSpace(folder)) return;
+            if (AddFolderToHistoryCore(folder)) Save();
+        }
+
+        // Returns true when the history changed and needs saving.
+        private bool AddFolderToHistoryCore(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder)) return false;
+            folder = folder.Trim();
+            if (RecentFolders.Count > 0 && string.Equals(RecentFolders[0], folder, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(CurrentOutputFolder, folder, StringComparison.OrdinalIgnoreCase))
+                return false;
+            InsertFolder(folder);
+            return true;
+        }
+
+        private void InsertFolder(string folder)
+        {
             folder = folder.Trim();
             CurrentOutputFolder = folder;
 
@@ -98,7 +118,6 @@ namespace MediaDownloader
             {
                 RecentFolders.RemoveAt(RecentFolders.Count - 1);
             }
-            Save();
         }
 
         public void RemoveFolderFromHistory(string folder)
@@ -154,6 +173,8 @@ namespace MediaDownloader
                     int parsedInt;
                     bool parsedBool;
                     CookieBrowser parsedBrowser;
+                    FileNameStyle parsedStyle;
+                    long parsedTicks;
                     if (key == "CurrentOutputFolder" && !string.IsNullOrEmpty(val))
                         s.CurrentOutputFolder = ResolveSavedFolder(val) ?? GetDownloadsFolder();
                     else if (key == "RecentFolder" && !string.IsNullOrEmpty(val))
@@ -180,15 +201,24 @@ namespace MediaDownloader
                     else if (key == "BrowserCookies" && Enum.TryParse(val, true, out parsedBrowser) &&
                         Enum.IsDefined(typeof(CookieBrowser), parsedBrowser))
                         s.BrowserCookies = parsedBrowser;
+                    else if (key == "FileNameStyle" && Enum.TryParse(val, true, out parsedStyle) &&
+                        Enum.IsDefined(typeof(FileNameStyle), parsedStyle))
+                        s.FileNameStyle = parsedStyle;
+                    else if (key == "WatchClipboard" && bool.TryParse(val, out parsedBool))
+                        s.WatchClipboard = parsedBool;
+                    else if (key == "LastEngineCheckUtc" && long.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedTicks) &&
+                        parsedTicks >= DateTime.MinValue.Ticks && parsedTicks <= DateTime.MaxValue.Ticks)
+                        s.LastEngineCheckUtc = new DateTime(parsedTicks, DateTimeKind.Utc);
                 }
 
                 if (loadedHistory.Count > 0)
                 {
                     s.RecentFolders = loadedHistory;
                 }
-                s.AddFolderToHistory(s.CurrentOutputFolder);
+                // Loading never rewrites the file; it is saved when something actually changes.
+                s.AddFolderToHistoryCore(s.CurrentOutputFolder);
             }
-            catch { }
+            catch (Exception ex) { AppLog.Error("Could not read settings", ex); }
             return s;
         }
 
@@ -207,14 +237,16 @@ namespace MediaDownloader
                 sb.AppendLine("EmbedSubtitles=" + EmbedSubtitles);
                 sb.AppendLine("IncludeAutoCaptions=" + IncludeAutoCaptions);
                 sb.AppendLine("BrowserCookies=" + BrowserCookies);
+                sb.AppendLine("FileNameStyle=" + FileNameStyle);
+                sb.AppendLine("WatchClipboard=" + WatchClipboard);
+                sb.AppendLine("LastEngineCheckUtc=" + LastEngineCheckUtc.Ticks.ToString(CultureInfo.InvariantCulture));
                 foreach (string dir in RecentFolders)
                 {
                     sb.AppendLine("RecentFolder=" + SerializeFolder(dir));
                 }
-                Directory.CreateDirectory(Path.GetDirectoryName(settingsPath));
-                File.WriteAllText(settingsPath, sb.ToString(), Encoding.UTF8);
+                AtomicFile.WriteAllText(settingsPath, sb.ToString());
             }
-            catch { }
+            catch (Exception ex) { AppLog.Error("Could not save settings", ex); }
         }
     }
 }

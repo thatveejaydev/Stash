@@ -4,7 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Custom Owner-Drawn Popup Menu Item (Supports aligned Checkmark + Main Title + Right Pill Tag or Bottom Subtext + Optional Remove Button)
     public class PopupMenuRow : Control
@@ -103,7 +103,7 @@ namespace MediaDownloader
             // Fixed 28px left gutter so all rows align to the exact same pixel column
             if (!string.IsNullOrEmpty(CheckGlyph) && (IsSelected || CheckGlyph == "☐" || CheckGlyph == "☑"))
             {
-                using (Font fCheck = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold))
+                Font fCheck = Theme.GetFont("Segoe UI Semibold", 9.5F, FontStyle.Bold);
                 {
                     Rectangle rCheck = new Rectangle(Dpi.Px(6), 0, Dpi.Px(22), string.IsNullOrEmpty(SubText) ? Height : Dpi.Px(24));
                     if (!string.IsNullOrEmpty(SubText)) rCheck.Y = Dpi.Px(4);
@@ -122,7 +122,7 @@ namespace MediaDownloader
                 int chevronSpace = DropdownExpanded.HasValue ? Dpi.Px(22) : 0;
                 int rightReserve = (string.IsNullOrEmpty(RightBadgeText) ? rightMargin : Dpi.Px(120)) + chevronSpace;
                 Rectangle rTitle = new Rectangle(contentLeft, 0, Width - contentLeft - rightReserve, Height);
-                using (Font fTitle = new Font("Segoe UI", 9.2F, IsSelected ? FontStyle.Bold : FontStyle.Regular))
+                Font fTitle = Theme.GetFont("Segoe UI", 9.2F, IsSelected ? FontStyle.Bold : FontStyle.Regular);
                 {
                     TextRenderer.DrawText(g, TitleText, fTitle, rTitle, mainColor,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
@@ -131,7 +131,7 @@ namespace MediaDownloader
                 if (!string.IsNullOrEmpty(RightBadgeText))
                 {
                     Rectangle rRight = new Rectangle(Width - Dpi.Px(125) - chevronSpace, 0, Dpi.Px(115), Height);
-                    using (Font fSub = new Font("Segoe UI", 8.2F, FontStyle.Regular))
+                    Font fSub = Theme.GetFont("Segoe UI", 8.2F, FontStyle.Regular);
                     {
                         TextRenderer.DrawText(g, RightBadgeText, fSub, rRight, Theme.TextMuted,
                             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
@@ -145,14 +145,14 @@ namespace MediaDownloader
             {
                 // Two-line mode: Title on top, smaller muted subtext directly underneath
                 Rectangle rTitle = new Rectangle(contentLeft, Dpi.Px(4), Width - contentLeft - rightMargin, Dpi.Px(20));
-                using (Font fTitle = new Font("Segoe UI", 9.2F, (IsSelected || AllowRemove) ? FontStyle.Bold : FontStyle.Regular))
+                Font fTitle = Theme.GetFont("Segoe UI", 9.2F, (IsSelected || AllowRemove) ? FontStyle.Bold : FontStyle.Regular);
                 {
                     TextRenderer.DrawText(g, TitleText, fTitle, rTitle, mainColor,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 }
 
                 Rectangle rSub = new Rectangle(contentLeft, Dpi.Px(23), Width - contentLeft - rightMargin, Dpi.Px(17));
-                using (Font fTiny = new Font("Segoe UI", 7.3F, FontStyle.Regular))
+                Font fTiny = Theme.GetFont("Segoe UI", 7.3F, FontStyle.Regular);
                 {
                     TextRenderer.DrawText(g, SubText, fTiny, rSub, Theme.TextMuted,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PathEllipsis | TextFormatFlags.NoPrefix);
@@ -172,7 +172,7 @@ namespace MediaDownloader
                     }
                 }
 
-                using (Font fRem = new Font("Segoe UI", 8.5F, FontStyle.Bold))
+                Font fRem = Theme.GetFont("Segoe UI", 8.5F, FontStyle.Bold);
                 {
                     Color xCol = isRemoveHovered ? Theme.AccentDanger : Theme.TextSecondary;
                     TextRenderer.DrawText(g, "✕", fRem, remRect, xCol,

@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
-namespace MediaDownloader
+namespace Stash
 {
     public sealed class UpdateInfo
     {
@@ -102,6 +102,8 @@ namespace MediaDownloader
                 if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("The downloaded update failed SHA-256 verification.");
                 ValidateExecutableVersion(temporary, update.Version);
+                AuthenticodeVerifier.VerifyUpdate(temporary, Assembly.GetEntryAssembly() == null
+                    ? Process.GetCurrentProcess().MainModule.FileName : Assembly.GetEntryAssembly().Location);
                 if (File.Exists(destination)) File.Delete(destination);
                 File.Move(temporary, destination);
                 return destination;

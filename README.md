@@ -55,12 +55,15 @@ Stash is powered by two open-source tools:
 - Choose between **1, 4, 8, 12, or 16 download connections** for supported websites.
 - Run between **one and six downloads simultaneously**.
 - View progress, download speed, and estimated time remaining.
-- Pause, resume, cancel, retry, or remove individual downloads.
+- Pause, resume, cancel, retry, or remove individual downloads, or pause and resume the whole queue at once.
+- Close Stash mid-download and continue where you left off next time.
+- Use the keyboard or right-click a download for quick actions.
 - Clear completed downloads from the queue with one button.
 
 ### Organize downloaded files
 
-- Choose where files are saved.
+- Choose where files are saved, and name files by title, title with video ID, or channel and title.
+- Drag links onto the window, or let Stash pick up links you copy (optional).
 - Quickly reuse recently selected folders.
 - Open a completed file’s location in File Explorer.
 - Receive a warning when a similar file already exists.
@@ -68,7 +71,7 @@ Stash is powered by two open-source tools:
 
 ### Simple setup and updates
 
-- Install the required download tools with one click.
+- Install the required download tools with one click. Downloads are checked against the publisher's SHA-256 checksums, and yt-dlp is kept up to date automatically.
 - Check for Stash updates from the **About Stash** window.
 - View release notes or install an available update and restart the application.
 - Remember your preferred format, quality, folder, subtitles, and other options.
@@ -132,13 +135,15 @@ The script compiles the source files and creates:
 
 Stash is compiled directly with the C# compiler included with .NET Framework. A Visual Studio solution is not required.
 
+To code-sign the build, set `STASH_SIGN_PFX` (and `STASH_SIGN_PASSWORD`) before running the script; `signtool` must be on the PATH. Once releases are signed, the updater only accepts updates signed by the same publisher.
+
 ### Run the tests
 
 ```powershell
 .\tests\run-tests.bat
 ```
 
-The test program is created under `bin\tests` and runs automatically.
+The test program is created under `bin\tests` and runs automatically. GitHub Actions runs the tests and the build on every push and pull request.
 
 ### Source structure
 

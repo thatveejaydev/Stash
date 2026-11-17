@@ -1,10 +1,11 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MediaDownloader
+namespace Stash
 {
     public interface IDownloadProcessRunner
     {
@@ -56,9 +57,13 @@ namespace MediaDownloader
                         // the started process and can terminate it directly.
                         try { if (!process.HasExited) process.Kill(); }
                         catch (InvalidOperationException) { } // Process already exited.
-                        break;
+                        catch (Win32Exception) { } // Access denied while the process is exiting.
+                        // Bounded: an orphaned child (for example ffmpeg) may keep the output
+                        // pipes open, and output after cancellation is ignored anyway.
+                        process.WaitForExit(5000);
+                        cancellationToken.ThrowIfCancellationRequested();
                     }
-                    // Also drains output callbacks before disposal or a subsequent resume.
+                    // Drains output callbacks before disposal or a subsequent resume.
                     process.WaitForExit();
                     cancellationToken.ThrowIfCancellationRequested();
                     return process.ExitCode;

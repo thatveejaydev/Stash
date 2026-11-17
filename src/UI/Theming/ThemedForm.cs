@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public abstract class ThemedForm : Form
     {

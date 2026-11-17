@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public static class UpdateApplier
     {

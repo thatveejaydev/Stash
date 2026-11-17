@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace MediaDownloader
+namespace Stash
 {
     public static class DownloadUrlValidator
     {

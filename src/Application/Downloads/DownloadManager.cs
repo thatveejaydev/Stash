@@ -4,12 +4,24 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MediaDownloader
+namespace Stash
 {
+    internal enum ShutdownMode
+    {
+        // Cancel running downloads and delete their partial files; idle items are left untouched.
+        CancelRunning,
+        // Pause running downloads and keep every partial file so the queue can resume next launch.
+        PauseForResume,
+        // Cancel everything and delete the partial files of every unfinished item.
+        DiscardAll
+    }
+
     // All queue state belongs to the creating (UI) thread. Process callbacks are
     // posted to that thread so painting, scheduling and user commands see one order.
     public sealed class DownloadManager
     {
+        private const int MetadataTimeoutMilliseconds = 20000;
+
         private sealed class Execution
         {
             public readonly CancellationTokenSource Cancellation = new CancellationTokenSource();
@@ -51,11 +63,30 @@ namespace MediaDownloader
             return new List<DownloadQueueItem>(items);
         }
 
+        internal static bool IsActive(QueueItemStatus status)
+        {
+            return status == QueueItemStatus.FetchingInfo || status == QueueItemStatus.Downloading || status == QueueItemStatus.Merging;
+        }
+
+        internal static bool IsUnfinished(QueueItemStatus status)
+        {
+            return IsActive(status) || status == QueueItemStatus.Queued || status == QueueItemStatus.Paused;
+        }
+
         public void AddItems(IList<DownloadQueueItem> newItems)
         {
             VerifyThread();
             if (stopping) return;
             items.InsertRange(0, newItems);
+            NotifyChanged();
+        }
+
+        // Restored items keep their saved order and status; nothing is scheduled automatically.
+        internal void AddRestoredItems(IList<DownloadQueueItem> restored)
+        {
+            VerifyThread();
+            if (stopping) return;
+            items.AddRange(restored);
             NotifyChanged();
         }
 
@@ -96,11 +127,7 @@ namespace MediaDownloader
             Execution execution;
             if (running.TryGetValue(item, out execution))
             {
-                if (item.Status != QueueItemStatus.FetchingInfo && item.Status != QueueItemStatus.Downloading) return;
-                if (execution.Cancellation.IsCancellationRequested) return;
-                execution.PauseRequested = true;
-                item.StatusText = "Pausing...";
-                execution.Cancellation.Cancel();
+                RequestPause(item, execution);
             }
             else if (item.Status == QueueItemStatus.Queued)
             {
@@ -114,6 +141,49 @@ namespace MediaDownloader
                 Schedule();
             }
             NotifyChanged();
+        }
+
+        private static bool RequestPause(DownloadQueueItem item, Execution execution)
+        {
+            if (item.Status != QueueItemStatus.FetchingInfo && item.Status != QueueItemStatus.Downloading) return false;
+            if (execution.Cancellation.IsCancellationRequested) return false;
+            execution.PauseRequested = true;
+            item.StatusText = "Pausing...";
+            execution.Cancellation.Cancel();
+            return true;
+        }
+
+        internal int PauseAll()
+        {
+            VerifyThread();
+            if (stopping) return 0;
+            int paused = 0;
+            foreach (DownloadQueueItem item in new List<DownloadQueueItem>(items))
+            {
+                Execution execution;
+                if (running.TryGetValue(item, out execution)) { if (RequestPause(item, execution)) paused++; }
+                else if (item.Status == QueueItemStatus.Queued) { MarkPaused(item); paused++; }
+            }
+            NotifyChanged();
+            return paused;
+        }
+
+        internal int ResumeAll()
+        {
+            VerifyThread();
+            if (stopping) return 0;
+            int resumed = 0;
+            // Resume in display order so the top of the list starts first.
+            foreach (DownloadQueueItem item in items)
+            {
+                if (item.Status != QueueItemStatus.Paused || running.ContainsKey(item)) continue;
+                item.Status = QueueItemStatus.Queued;
+                item.StatusText = "Resuming...";
+                resumed++;
+            }
+            if (resumed > 0) Schedule();
+            NotifyChanged();
+            return resumed;
         }
 
         public void Cancel(DownloadQueueItem item)
@@ -133,6 +203,11 @@ namespace MediaDownloader
                 cleanups.Add(FinishIdleCancellationAsync(item));
             }
             NotifyChanged();
+        }
+
+        internal static bool CanCancel(QueueItemStatus status)
+        {
+            return IsUnfinished(status);
         }
 
         public bool RemoveFinished(DownloadQueueItem item)
@@ -184,22 +259,39 @@ namespace MediaDownloader
 
         private void Fail(DownloadQueueItem item, string details)
         {
-            item.Failure = DownloadFailure.Create(item.Status == QueueItemStatus.Merging ? "Merging" : item.Status == QueueItemStatus.FetchingInfo ? "Fetching video information" : "Downloading", item.ErrorOutput + "\n" + details);
+            string stage = item.Status == QueueItemStatus.Merging ? "Merging" : item.Status == QueueItemStatus.FetchingInfo ? "Fetching video information" : "Downloading";
+            item.Failure = DownloadFailure.Create(stage, (item.ErrorOutput + "\n" + details).Trim());
             if (ErrorLog != null) ErrorLog(string.Format("[{0}] {1}\n{2}", item.Id, item.Title, item.Failure.TechnicalDetails));
             item.Status = QueueItemStatus.Error;
             item.StatusText = "Download failed";
+            item.Speed = "—";
+            item.Eta = "—";
         }
 
-        public async Task ShutdownAsync()
+        public Task ShutdownAsync()
+        {
+            return ShutdownAsync(ShutdownMode.CancelRunning);
+        }
+
+        internal async Task ShutdownAsync(ShutdownMode mode)
         {
             VerifyThread();
             stopping = true;
             List<Task> pending = new List<Task>(cleanups);
             foreach (Execution execution in new List<Execution>(running.Values))
             {
-                execution.PauseRequested = false;
+                execution.PauseRequested = mode == ShutdownMode.PauseForResume;
                 execution.Cancellation.Cancel();
                 pending.Add(execution.Completion);
+            }
+            if (mode == ShutdownMode.DiscardAll)
+            {
+                foreach (DownloadQueueItem item in items)
+                {
+                    if (running.ContainsKey(item)) continue;
+                    if (item.Status == QueueItemStatus.Queued || item.Status == QueueItemStatus.Paused || item.Status == QueueItemStatus.Error)
+                        pending.Add(CleanupCancelledAsync(item));
+                }
             }
             await Task.WhenAll(pending);
         }
@@ -215,7 +307,14 @@ namespace MediaDownloader
                     await DownloadAsync(item, execution, executable, ffmpeg, token);
                 }
                 catch (Exception ex) { failure = ex; }
-                if (failure != null && token.IsCancellationRequested)
+                if (failure == null) return;
+                if (!token.IsCancellationRequested)
+                {
+                    // Cleanup problems must never prevent the card from reaching a final state.
+                    try { await StorageFileService.CleanupEmptyTemporaryFolderAsync(item); }
+                    catch (Exception cleanupError) { ReportError(item, "Temporary folder cleanup failed", cleanupError); }
+                }
+                if (token.IsCancellationRequested)
                 {
                     if (execution.PauseRequested) MarkPaused(item);
                     else
@@ -224,19 +323,11 @@ namespace MediaDownloader
                         MarkCancelled(item);
                     }
                 }
-                else if (failure != null)
+                else
                 {
-                    await StorageFileService.CleanupEmptyTemporaryFolderAsync(item);
-                    if (token.IsCancellationRequested)
-                    {
-                        if (execution.PauseRequested) MarkPaused(item);
-                        else { await CleanupCancelledAsync(item); MarkCancelled(item); }
-                    }
-                    else
-                    {
-                        Fail(item, failure.ToString());
-                        WriteLog(string.Format("[{0}] Error: {1}", item.Id, failure.Message));
-                    }
+                    ReportError(item, "Download error", failure);
+                    Fail(item, DescribeException(failure));
+                    WriteLog(string.Format("[{0}] Error: {1}", item.Id, failure.Message));
                 }
             }
             finally
@@ -248,28 +339,49 @@ namespace MediaDownloader
             }
         }
 
+        // User-facing details carry the message, never the stack trace (which can include local paths).
+        private static string DescribeException(Exception exception)
+        {
+            Exception root = exception is AggregateException ? exception.GetBaseException() : exception;
+            return root.Message;
+        }
+
+        private void ReportError(DownloadQueueItem item, string context, Exception exception)
+        {
+            if (ErrorLog != null) ErrorLog(string.Format("[{0}] {1}: {2}", item.Id, context, exception));
+        }
+
         private async Task DownloadAsync(DownloadQueueItem item, Execution execution, string executable, string ffmpeg, CancellationToken token)
         {
             if (!item.MetadataResolved)
             {
-                Tuple<string, string> metadata = await FetchMetadataAsync(executable, item, token);
+                string[] metadata = await FetchMetadataAsync(executable, item, token);
                 token.ThrowIfCancellationRequested();
-                if (!string.IsNullOrWhiteSpace(metadata.Item1))
+                if (!string.IsNullOrWhiteSpace(metadata[0]))
                 {
-                    item.Title = metadata.Item1;
-                    if (!confirmFileName(item, metadata.Item1, metadata.Item2))
-                    {
-                        execution.Cancellation.Cancel();
-                    }
+                    item.Title = metadata[0];
+                    if (string.IsNullOrEmpty(item.SourceId)) item.SourceId = metadata[1];
+                    item.Uploader = metadata[2];
+                    if (!confirmFileName(item, metadata[0], metadata[1])) execution.Cancellation.Cancel();
                     else item.MetadataResolved = true;
                 }
+                else
+                {
+                    // Do not repeat a lookup that already failed on every resume; yt-dlp names the file itself.
+                    item.MetadataResolved = true;
+                }
+            }
+            else if (item.CustomBaseFileName == null && !string.IsNullOrWhiteSpace(item.Title) && item.Title != item.Url)
+            {
+                // Titles supplied up front (playlists) still go through duplicate and naming checks.
+                if (!confirmFileName(item, item.Title, item.SourceId)) execution.Cancellation.Cancel();
             }
             // A pause/cancel can arrive while the rename dialog is open too.
             token.ThrowIfCancellationRequested();
             item.Status = QueueItemStatus.Downloading;
             item.StatusText = "Preparing files";
             NotifyChanged();
-            Directory.CreateDirectory(item.TemporaryFolder);
+            StorageFileService.CreateTemporaryFolder(item);
             token.ThrowIfCancellationRequested();
             string arguments = YtDlpCommandBuilder.BuildArguments(item, ffmpeg);
             item.CompletedDetails = null;
@@ -293,7 +405,8 @@ namespace MediaDownloader
                 item.Speed = "—";
                 item.Eta = "—";
                 NotifyChanged();
-                await StorageFileService.CleanupPartialFilesForItemAsync(item);
+                try { await StorageFileService.CleanupPartialFilesForItemAsync(item); }
+                catch (Exception cleanupError) { ReportError(item, "Temporary file cleanup failed", cleanupError); }
                 token.ThrowIfCancellationRequested();
                 item.CompletedDetails = await CompletedDownloadDetails.ReadFileAsync(item.OutputFilePath, item.CompletedDetails);
                 token.ThrowIfCancellationRequested();
@@ -306,34 +419,42 @@ namespace MediaDownloader
             }
             else
             {
-                await StorageFileService.CleanupEmptyTemporaryFolderAsync(item);
+                try { await StorageFileService.CleanupEmptyTemporaryFolderAsync(item); }
+                catch (Exception cleanupError) { ReportError(item, "Temporary folder cleanup failed", cleanupError); }
                 token.ThrowIfCancellationRequested();
                 Fail(item, "Engine exit code: " + exitCode);
                 WriteLog(string.Format("[{0}] Failed with exit code {1}", item.Id, exitCode));
             }
         }
 
-        private async Task<Tuple<string, string>> FetchMetadataAsync(string executable, DownloadQueueItem item, CancellationToken token)
+        // Returns { title, id, uploader }; empty strings when the lookup fails.
+        private async Task<string[]> FetchMetadataAsync(string executable, DownloadQueueItem item, CancellationToken token)
         {
             List<string> lines = new List<string>();
             using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
-                timeout.CancelAfter(9000);
+                timeout.CancelAfter(MetadataTimeoutMilliseconds);
                 try
                 {
-                    await processRunner.RunAsync(executable,
-                        YtDlpCommandBuilder.BuildBrowserCookieArguments(item.BrowserCookies) +
-                        string.Format("--no-playlist --get-title --get-id --no-warnings \"{0}\"", item.Url.Replace("\"", "")),
-                        timeout.Token, line => { if (!string.IsNullOrWhiteSpace(line)) lines.Add(line); }, null);
-                    string title = lines.Count > 0 ? StorageFileService.SanitizeFileName(lines[0].Trim()) : "";
-                    string id = lines.Count > 1 ? lines[lines.Count - 1].Trim() : "";
-                    return Tuple.Create(title, id);
+                    await processRunner.RunAsync(executable, YtDlpCommandBuilder.BuildMetadataArguments(item),
+                        timeout.Token, line => { if (!string.IsNullOrWhiteSpace(line)) lock (lines) lines.Add(line); }, null);
+                    string[] result;
+                    lock (lines)
+                    {
+                        result = new[]
+                        {
+                            lines.Count > 0 ? StorageFileService.SanitizeFileName(lines[0].Trim()) : "",
+                            lines.Count > 1 ? lines[1].Trim() : "",
+                            lines.Count > 2 ? lines[2].Trim() : ""
+                        };
+                    }
+                    return result;
                 }
                 catch (Exception ex)
                 {
                     token.ThrowIfCancellationRequested();
                     WriteLog("Metadata lookup failed: " + ex.Message);
-                    return Tuple.Create("", "");
+                    return new[] { "", "", "" };
                 }
             }
         }

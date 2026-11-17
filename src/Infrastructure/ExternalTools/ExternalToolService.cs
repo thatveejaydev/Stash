@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace MediaDownloader
+namespace Stash
 {
     public static class ExternalToolService
     {
@@ -29,38 +29,26 @@ namespace MediaDownloader
                     p.WaitForExit(2000);
                 }
             }
-            catch { }
-        }
-
-        public static Task DownloadFileAsync(string url, string destinationPath)
-        {
-            return Task.Run(() =>
-            {
-                using (WebClient wc = new WebClient())
-                {
-                    wc.Headers.Add("User-Agent", "Stash-Windows-Downloader/" + UpdateService.InstalledVersion);
-                    wc.DownloadFile(url, destinationPath);
-                }
-            });
+            catch (Exception ex) { AppLog.Error("taskkill failed for process " + pid, ex); }
         }
 
         public static Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl)
         {
-            return FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, CookieBrowser.None);
+            return FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, CookieBrowser.None, TimeSpan.FromMinutes(3), CancellationToken.None);
         }
 
-        internal static async Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl, CookieBrowser browser)
+        internal static async Task<PlaylistInfo> FetchPlaylistInfoAsync(string ytDlpPath, string playlistUrl, CookieBrowser browser,
+            TimeSpan timeout, CancellationToken cancellation)
         {
             PlaylistInfo info = new PlaylistInfo();
             try
             {
-                string safeUrl = playlistUrl.Replace("\"", "");
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = ytDlpPath,
-                    Arguments = YtDlpCommandBuilder.BuildBrowserCookieArguments(browser) + string.Format(
-                        "--flat-playlist --print \"%(playlist_title)s\t%(playlist_count)s\t%(id)s\t%(title)s\t%(url)s\" --no-warnings \"{0}\"",
-                        safeUrl),
+                    Arguments = YtDlpCommandBuilder.BuildBrowserCookieArguments(browser) +
+                        "--flat-playlist --print \"%(playlist_title)s\t%(playlist_count)s\t%(id)s\t%(title)s\t%(url)s\" --no-warnings " +
+                        CommandLine.Quote(playlistUrl),
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
@@ -70,83 +58,76 @@ namespace MediaDownloader
                 };
 
                 using (Process p = Process.Start(psi))
+                using (CancellationTokenSource limit = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
                 {
-                    const int timeoutMilliseconds = 15000;
-                    Stopwatch elapsed = Stopwatch.StartNew();
+                    limit.CancelAfter(timeout);
                     Task<string[]> readTask = Task.WhenAll(p.StandardOutput.ReadToEndAsync(), p.StandardError.ReadToEndAsync());
-                    Task completed = await Task.WhenAny(readTask, Task.Delay(timeoutMilliseconds));
-                    if (completed == readTask)
+                    TaskCompletionSource<bool> stopped = new TaskCompletionSource<bool>();
+                    using (limit.Token.Register(() => stopped.TrySetResult(true)))
                     {
-                        string[] output = await readTask;
-                        string raw = output[0];
-                        info.CookieAccessFailed = DownloadFailure.IsBrowserCookieError(output[1]);
-                        int remaining = Math.Max(0, timeoutMilliseconds - (int)elapsed.ElapsedMilliseconds);
-                        if (!await Task.Run(() => p.WaitForExit(remaining)))
+                        Task completed = await Task.WhenAny(readTask, stopped.Task);
+                        if (completed != readTask)
                         {
                             KillProcessTree(p.Id);
+                            info.TimedOut = !cancellation.IsCancellationRequested;
                             return info;
                         }
-                        if (p.ExitCode != 0) return info;
-
-                        if (!string.IsNullOrWhiteSpace(raw))
-                        {
-                            string[] lines = raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                            foreach (string line in lines)
-                            {
-                                if (string.IsNullOrWhiteSpace(line)) continue;
-                                string[] parts = line.Split('\t');
-                                if (parts.Length >= 4)
-                                {
-                                    if (string.IsNullOrEmpty(info.Title) && parts[0] != "NA" && !string.IsNullOrWhiteSpace(parts[0]))
-                                    {
-                                        info.Title = StorageFileService.SanitizeFileName(parts[0].Trim());
-                                    }
-
-                                    if (info.Count == 0 && parts[1] != "NA")
-                                    {
-                                        int c;
-                                        if (int.TryParse(parts[1].Trim(), out c))
-                                        {
-                                            info.Count = c;
-                                        }
-                                    }
-
-                                    string entryId = parts[2].Trim();
-                                    string entryTitle = StorageFileService.SanitizeFileName(parts[3].Trim());
-                                    string entryUrl = parts.Length >= 5 ? parts[4].Trim() : "";
-                                    if (string.IsNullOrEmpty(entryUrl) || entryUrl == "NA")
-                                    {
-                                        entryUrl = "https://www.youtube.com/watch?v=" + entryId;
-                                    }
-
-                                    if (!string.IsNullOrEmpty(entryId))
-                                    {
-                                        PlaylistEntry entry = new PlaylistEntry
-                                        {
-                                            Id = entryId,
-                                            Title = string.IsNullOrEmpty(entryTitle) ? entryId : entryTitle,
-                                            Url = entryUrl
-                                        };
-                                        info.Entries.Add(entry);
-                                    }
-                                }
-                            }
-
-                            if (info.Count < info.Entries.Count)
-                            {
-                                info.Count = info.Entries.Count;
-                            }
-                        }
                     }
-                    else
+                    string[] output = await readTask;
+                    info.CookieAccessFailed = DownloadFailure.IsBrowserCookieError(output[1]);
+                    if (!await Task.Run(() => p.WaitForExit(5000)))
                     {
                         KillProcessTree(p.Id);
+                        return info;
                     }
+                    ParsePlaylistOutput(output[0], info);
+                    // yt-dlp exits non-zero when some entries are unavailable; keep what it listed.
+                    if (p.ExitCode != 0 && info.Entries.Count == 0) info.ErrorDetails = output[1];
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.Error("Playlist lookup failed", ex);
+                info.ErrorDetails = ex.Message;
+            }
 
             return info;
+        }
+
+        internal static void ParsePlaylistOutput(string raw, PlaylistInfo info)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string line in raw.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] parts = line.Split('\t');
+                if (parts.Length < 4) continue;
+
+                if (string.IsNullOrEmpty(info.Title) && parts[0] != "NA" && !string.IsNullOrWhiteSpace(parts[0]))
+                    info.Title = StorageFileService.SanitizeFileName(parts[0].Trim());
+
+                int reported;
+                if (info.ReportedCount == 0 && parts[1] != "NA" && int.TryParse(parts[1].Trim(), out reported))
+                    info.ReportedCount = reported;
+
+                string entryId = parts[2].Trim();
+                if (string.IsNullOrEmpty(entryId) || entryId == "NA" || !seen.Add(entryId)) continue;
+                string entryTitle = StorageFileService.SanitizeFileName(parts[3].Trim());
+                string entryUrl = parts.Length >= 5 ? parts[4].Trim() : "";
+                Uri parsed;
+                if (string.IsNullOrEmpty(entryUrl) || entryUrl == "NA" || !Uri.TryCreate(entryUrl, UriKind.Absolute, out parsed) ||
+                    (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
+                {
+                    entryUrl = "https://www.youtube.com/watch?v=" + entryId;
+                }
+
+                info.Entries.Add(new PlaylistEntry
+                {
+                    Id = entryId,
+                    Title = string.IsNullOrEmpty(entryTitle) || entryTitle == "NA" ? entryId : entryTitle,
+                    Url = entryUrl
+                });
+            }
         }
     }
 
@@ -160,8 +141,13 @@ namespace MediaDownloader
     public class PlaylistInfo
     {
         internal bool CookieAccessFailed { get; set; }
+        internal bool TimedOut { get; set; }
+        internal string ErrorDetails { get; set; }
         public string Title { get; set; }
-        public int Count { get; set; }
+        // The size reported by the site; it can include private or deleted entries that are not listed.
+        public int ReportedCount { get; set; }
+        public int Count { get { return Entries.Count; } }
+        public int UnavailableCount { get { return Math.Max(0, ReportedCount - Entries.Count); } }
         public List<PlaylistEntry> Entries { get; set; }
 
         public PlaylistInfo()

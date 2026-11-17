@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+- **Resume After Closing:** Closing Stash during downloads asks whether to pause them and continue next time, cancel them, or keep downloading. The queue, including finished history, is restored on the next launch.
+- **Pause All / Resume All:** One button pauses or resumes the whole queue.
+- **Drag and Drop:** Drop links, text, or `.url` shortcuts onto the window to queue them.
+- **Queue Keyboard and Menu:** Use arrow keys, Space (pause/resume), Enter (open file or error details), Del (cancel/remove), Ctrl+C (copy link), and a right-click menu on each card. Double-click a finished card to open the file.
+- **File Name Style:** Choose Title, Title [ID], or Channel - Title under Options.
+- **Clipboard Watching (opt-in):** Under Options → Clipboard, Stash can queue links you copy in other apps.
+- **Notifications:** The taskbar button shows queue progress, and a notification appears when the queue finishes while Stash is in the background.
+- **Engine Updates:** yt-dlp is checked for updates once a day when nothing is downloading. FFmpeg is refreshed when it is over 30 days old, and engine downloads show progress.
+
+### Improvements & Fixes
+- **Drive Roots:** Downloads to a drive root such as `D:\` no longer fail or get stuck.
+- **Verified Engines:** yt-dlp and FFmpeg are checked against the publisher's SHA-256 list and test-run before replacing the installed copy. Interrupted downloads can no longer leave a broken engine.
+- **Clearer Errors:** Failure reasons use yt-dlp's exact wording, so network errors are no longer reported as access problems. Rate limits, unsupported sites and unavailable formats have their own advice. Error details no longer include stack traces.
+- **Playlists:** Playlists with private or deleted videos can be queued (skipped videos are counted). Large playlists get up to 3 minutes, with a Retry button. The linked video can always be queued on its own, and custom ranges default to the full list.
+- **Batch Paste:** Playlists pasted among other links each open the playlist picker instead of downloading as one item. Links already in the queue are skipped.
+- **Duplicates:** Duplicate detection no longer matches titles that merely start the same way, also covers playlist items and other queued downloads, and no longer freezes in large folders.
+- **Reliability:** Settings and the queue are saved atomically. Closing Stash can no longer hang on a stuck engine process. Updating engines waits for downloads to stop. Leftover temporary folders are hidden and cleaned up.
+- **Signed Updates:** When releases are code-signed, updates must be signed by the same publisher.
+
 ## v0.2.6
 
 ### Improvements & Fixes

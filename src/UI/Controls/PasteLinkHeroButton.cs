@@ -4,7 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Purple "Paste Link" Hero Button (Clipboard + Down-Arrow icon + "Paste Link")
     public class PasteLinkHeroButton : Control
@@ -16,7 +16,7 @@ namespace MediaDownloader
         {
             Size = new Size(Dpi.Px(112), Dpi.Px(40));
             Cursor = Cursors.Hand;
-            Font = new Font("Segoe UI Semibold", 10.2F, FontStyle.Bold);
+            Font = Theme.GetFont("Segoe UI Semibold", 10.2F, FontStyle.Bold);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
 

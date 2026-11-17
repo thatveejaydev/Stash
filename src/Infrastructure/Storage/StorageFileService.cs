@@ -5,11 +5,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace MediaDownloader
+namespace Stash
 {
     public static class StorageFileService
     {
-        private const int MaxSafeBaseFileNameLength = 100;
+        internal const int MaxSafeBaseFileNameLength = 100;
+        internal const string TemporaryFolderPrefix = ".stash-temp-";
 
         public static string SanitizeFileName(string name)
         {
@@ -50,54 +51,87 @@ namespace MediaDownloader
             return cleaned;
         }
 
+        // Normalizes a directory for comparisons: full path without trailing separators,
+        // except for a drive or share root, which keeps its separator ("D:\").
+        internal static string NormalizeDirectory(string path)
+        {
+            string full = Path.GetFullPath(path);
+            string root = Path.GetPathRoot(full) ?? "";
+            if (full.Length > root.Length) full = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return full;
+        }
+
+        internal static bool SameDirectory(string first, string second)
+        {
+            if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(second)) return false;
+            try { return string.Equals(NormalizeDirectory(first), NormalizeDirectory(second), StringComparison.OrdinalIgnoreCase); }
+            catch (ArgumentException) { return false; }
+            catch (NotSupportedException) { return false; }
+            catch (PathTooLongException) { return false; }
+        }
+
+        private static bool IsPartialFile(string file)
+        {
+            string ext = Path.GetExtension(file);
+            return string.Equals(ext, ".part", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ext, ".ytdl", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ext, ".temp", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ext, ".tmp", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Finds an existing download with the same base name, or one tagged with the same [video id].
+        // Uses native wildcard filtering so large folders are not enumerated in managed code.
         public static string FindSimilarExistingFile(string folder, string cleanTitle, string videoId)
         {
             if (!Directory.Exists(folder)) return null;
             try
             {
-                string[] files = Directory.GetFiles(folder);
-                foreach (string file in files)
+                if (!string.IsNullOrEmpty(cleanTitle))
                 {
-                    string ext = Path.GetExtension(file);
-                    if (string.Equals(ext, ".part", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(ext, ".ytdl", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(ext, ".temp", StringComparison.OrdinalIgnoreCase))
+                    foreach (string file in Directory.EnumerateFiles(folder, cleanTitle + ".*"))
                     {
-                        continue;
-                    }
-
-                    string nameNoExt = Path.GetFileNameWithoutExtension(file);
-                    string strippedExisting = Regex.Replace(nameNoExt, @"\s*\[[A-Za-z0-9_\-]{5,20}\]$", "").Trim();
-
-                    if (!string.IsNullOrEmpty(cleanTitle))
-                    {
-                        if (string.Equals(nameNoExt, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(strippedExisting, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                            nameNoExt.StartsWith(cleanTitle, StringComparison.OrdinalIgnoreCase))
-                        {
+                        if (IsPartialFile(file)) continue;
+                        if (string.Equals(Path.GetFileNameWithoutExtension(file), cleanTitle, StringComparison.OrdinalIgnoreCase))
                             return Path.GetFileName(file);
-                        }
                     }
-
-                    if (!string.IsNullOrEmpty(videoId) &&
-                        nameNoExt.IndexOf("[" + videoId + "]", StringComparison.OrdinalIgnoreCase) >= 0)
+                    foreach (string file in Directory.EnumerateFiles(folder, cleanTitle + " [*]*"))
                     {
-                        return Path.GetFileName(file);
+                        if (IsPartialFile(file)) continue;
+                        string stripped = Regex.Replace(Path.GetFileNameWithoutExtension(file), @"\s*\[[A-Za-z0-9_\-]{5,20}\]$", "").Trim();
+                        if (string.Equals(stripped, cleanTitle, StringComparison.OrdinalIgnoreCase))
+                            return Path.GetFileName(file);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(videoId) && Regex.IsMatch(videoId, @"^[A-Za-z0-9_\-]{1,64}$"))
+                {
+                    foreach (string file in Directory.EnumerateFiles(folder, "*[" + videoId + "]*"))
+                    {
+                        if (IsPartialFile(file)) continue;
+                        if (Path.GetFileNameWithoutExtension(file).IndexOf("[" + videoId + "]", StringComparison.OrdinalIgnoreCase) >= 0)
+                            return Path.GetFileName(file);
                     }
                 }
             }
-            catch { }
+            catch (IOException ex) { AppLog.Error("Duplicate check failed", ex); }
+            catch (UnauthorizedAccessException ex) { AppLog.Error("Duplicate check failed", ex); }
+            catch (ArgumentException ex) { AppLog.Error("Duplicate check failed", ex); }
             return null;
         }
 
         public static string SuggestNextAvailableName(string folder, string baseTitle, string ext)
+        {
+            return SuggestNextAvailableName(folder, baseTitle, ext, null);
+        }
+
+        internal static string SuggestNextAvailableName(string folder, string baseTitle, string ext, Func<string, bool> reserved)
         {
             int counter = 2;
             while (counter < 999)
             {
                 string candidate = string.Format("{0} ({1})", baseTitle, counter);
                 string fullPath = Path.Combine(folder, candidate + ext);
-                if (!File.Exists(fullPath))
+                if (!File.Exists(fullPath) && (reserved == null || !reserved(candidate)))
                 {
                     return candidate;
                 }
@@ -109,11 +143,23 @@ namespace MediaDownloader
         private static string GetValidatedTemporaryFolder(DownloadQueueItem item)
         {
             string folder = Path.GetFullPath(item.TemporaryFolder);
-            string parent = Path.GetFullPath(item.OutputFolder).TrimEnd(Path.DirectorySeparatorChar);
-            if (!string.Equals(Path.GetDirectoryName(folder), parent, StringComparison.OrdinalIgnoreCase) ||
-                !Path.GetFileName(folder).StartsWith(".stash-temp-", StringComparison.Ordinal))
+            if (!SameDirectory(Path.GetDirectoryName(folder), item.OutputFolder) ||
+                !Path.GetFileName(folder).StartsWith(TemporaryFolderPrefix, StringComparison.Ordinal))
                 throw new InvalidOperationException("Invalid temporary folder.");
             return folder;
+        }
+
+        internal static void CreateTemporaryFolder(DownloadQueueItem item)
+        {
+            string folder = GetValidatedTemporaryFolder(item);
+            DirectoryInfo info = Directory.CreateDirectory(folder);
+            try
+            {
+                // Keep in-progress fragments out of the way in Explorer.
+                if ((info.Attributes & FileAttributes.Hidden) == 0) info.Attributes |= FileAttributes.Hidden;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         public static Task CleanupEmptyTemporaryFolderAsync(DownloadQueueItem item)
@@ -143,22 +189,68 @@ namespace MediaDownloader
                 try
                 {
                     if (!Directory.Exists(folder)) break;
-                    // Never follow junctions or recursively delete unknown subdirectories.
-                    if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) break;
-                    foreach (string file in Directory.GetFiles(folder))
-                    {
-                        if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) continue;
-                        try { File.Delete(file); deleted++; }
-                        catch (IOException) { }
-                        catch (UnauthorizedAccessException) { }
-                    }
-                    Directory.Delete(folder, false);
+                    deleted += DeleteTemporaryFolderContents(folder);
                     break;
                 }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }
             return deleted;
+        }
+
+        // Deletes the files of one Stash temporary folder and then the folder itself.
+        // Never follows junctions or recursively deletes unknown subdirectories.
+        private static int DeleteTemporaryFolderContents(string folder)
+        {
+            int deleted = 0;
+            if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) return 0;
+            foreach (string file in Directory.GetFiles(folder))
+            {
+                if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) continue;
+                try { File.Delete(file); deleted++; }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            Directory.Delete(folder, false);
+            return deleted;
+        }
+
+        // Removes temporary folders left behind by earlier sessions (for example after a crash).
+        // Folders still referenced by a restored queue item, or touched recently, are kept.
+        internal static int SweepOrphanedTemporaryFolders(IEnumerable<string> outputFolders, ICollection<string> inUse, TimeSpan minimumAge)
+        {
+            int removed = 0;
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string outputFolder in outputFolders)
+            {
+                if (string.IsNullOrWhiteSpace(outputFolder)) continue;
+                string normalized;
+                try { normalized = NormalizeDirectory(outputFolder); }
+                catch (Exception) { continue; }
+                if (!seen.Add(normalized) || !Directory.Exists(normalized)) continue;
+                string[] candidates;
+                try { candidates = Directory.GetDirectories(normalized, TemporaryFolderPrefix + "*"); }
+                catch (IOException) { continue; }
+                catch (UnauthorizedAccessException) { continue; }
+                foreach (string candidate in candidates)
+                {
+                    try
+                    {
+                        string full = Path.GetFullPath(candidate);
+                        bool referenced = false;
+                        foreach (string used in inUse)
+                            if (string.Equals(Path.GetFullPath(used), full, StringComparison.OrdinalIgnoreCase)) { referenced = true; break; }
+                        if (referenced) continue;
+                        if (DateTime.UtcNow - Directory.GetLastWriteTimeUtc(full) < minimumAge) continue;
+                        if (Directory.GetDirectories(full).Length > 0) continue;
+                        DeleteTemporaryFolderContents(full);
+                        removed++;
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            }
+            return removed;
         }
     }
 }

@@ -2,10 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public enum PlaylistDownloadChoice
     {
@@ -20,15 +21,23 @@ namespace MediaDownloader
         private readonly string ytDlpPath;
         private readonly CookieBrowser browserCookies;
         private PlaylistInfo playlistInfo;
+        private static readonly TimeSpan LookupTimeout = TimeSpan.FromMinutes(3);
+        private CancellationTokenSource lookup;
+        private readonly System.Windows.Forms.Timer elapsedTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        private DateTime lookupStarted;
+        private ModernButton btnRetry;
+
+        // Entries the site actually listed. Private or deleted videos counted by the site are skipped.
         private int ReadyVideoCount
         {
             get
             {
-                if (playlistInfo == null || playlistInfo.CookieAccessFailed ||
-                    playlistInfo.Entries.Count != playlistInfo.Count) return 0;
+                if (playlistInfo == null || playlistInfo.CookieAccessFailed) return 0;
                 return playlistInfo.Entries.Count;
             }
         }
+
+        public List<string> ResultIds { get; private set; }
 
         private readonly bool hasSingleVideo;
         private readonly string singleVideoUrl;
@@ -66,6 +75,7 @@ namespace MediaDownloader
             this.browserCookies = browserCookies;
             ResultUrls = new List<string>();
             ResultTitles = new List<string>();
+            ResultIds = new List<string>();
 
             hasSingleVideo = DownloadUrlValidator.TryExtractSingleVideoUrl(url, out singleVideoUrl, out singleVideoId);
             selectedChoice = PlaylistDownloadChoice.EntirePlaylist;
@@ -78,7 +88,7 @@ namespace MediaDownloader
             MaximizeBox = false;
             MinimizeBox = false;
             BackColor = Theme.BgTopBar;
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
+            Font = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
 
             try
             {
@@ -128,7 +138,7 @@ namespace MediaDownloader
                 Text = "Playlist Link Detected",
                 Location = new Point(Dpi.Px(70), Dpi.Px(16)),
                 AutoSize = true,
-                Font = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 11.5F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary
             };
             Controls.Add(lblTitle);
@@ -139,7 +149,7 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(70), Dpi.Px(40)),
                 Size = new Size(Dpi.Px(580), Dpi.Px(20)),
                 AutoEllipsis = true,
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+                Font = Theme.GetFont("Segoe UI", 9F, FontStyle.Regular),
                 ForeColor = Theme.TextSecondary
             };
             Controls.Add(lblPlaylistInfo);
@@ -200,7 +210,7 @@ namespace MediaDownloader
                 Location = new Point(0, Dpi.Px(6)),
                 AutoSize = true,
                 ForeColor = Theme.BrandPurpleLight,
-                Font = new Font("Segoe UI", 9.8F, FontStyle.Regular)
+                Font = Theme.GetFont("Segoe UI", 9.8F, FontStyle.Regular)
             };
             lblFrom.Click += (s, e) =>
             {
@@ -226,7 +236,7 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(126), Dpi.Px(6)),
                 AutoSize = true,
                 ForeColor = Theme.BrandPurpleLight,
-                Font = new Font("Segoe UI", 9.8F, FontStyle.Regular)
+                Font = Theme.GetFont("Segoe UI", 9.8F, FontStyle.Regular)
             };
             lblTo.Click += (s, e) =>
             {
@@ -252,7 +262,7 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(236), Dpi.Px(6)),
                 AutoSize = true,
                 ForeColor = Color.FromArgb(215, 218, 230),
-                Font = new Font("Segoe UI", 9.8F, FontStyle.Regular)
+                Font = Theme.GetFont("Segoe UI", 9.8F, FontStyle.Regular)
             };
             lblRangeHint.Click += (s, e) => SelectCard(PlaylistDownloadChoice.CustomRange, false);
 
@@ -262,7 +272,7 @@ namespace MediaDownloader
                 Location = new Point(Dpi.Px(280), Dpi.Px(6)),
                 AutoSize = true,
                 ForeColor = Theme.BrandPurpleLight,
-                Font = new Font("Segoe UI", 9.8F, FontStyle.Regular)
+                Font = Theme.GetFont("Segoe UI", 9.8F, FontStyle.Regular)
             };
             lblRangeCount.Click += (s, e) => SelectCard(PlaylistDownloadChoice.CustomRange, false);
 
@@ -291,10 +301,31 @@ namespace MediaDownloader
                 Text = "\u25CF Checking playlist...",
                 Location = new Point(Dpi.Px(20), Dpi.Px(324)),
                 AutoSize = true,
-                Font = new Font("Segoe UI", 8.8F),
+                Font = Theme.GetFont("Segoe UI", 8.8F),
                 ForeColor = Theme.AccentWarning
             };
             Controls.Add(lblStatus);
+
+            btnRetry = new ModernButton
+            {
+                Text = "Retry",
+                Location = new Point(Dpi.Px(265), Dpi.Px(316)),
+                Size = new Size(Dpi.Px(80), Dpi.Px(38)),
+                BaseColor = Theme.BgSurface,
+                HoverColor = Theme.BgSurfaceHover,
+                BorderColor = Theme.BorderSubtle,
+                ForeColor = Theme.TextSecondary,
+                Font = Theme.GetFont("Segoe UI", 9F),
+                Visible = false
+            };
+            btnRetry.Click += (s, e) => LoadPlaylistInfoAsync();
+            Controls.Add(btnRetry);
+            elapsedTimer.Tick += (s, e) =>
+            {
+                int seconds = (int)(DateTime.UtcNow - lookupStarted).TotalSeconds;
+                lblStatus.Text = string.Format("● Checking playlist... {0}s", seconds);
+            };
+            FormClosed += (s, e) => { if (lookup != null) lookup.Cancel(); elapsedTimer.Stop(); };
 
             // Buttons
             btnCancel = new ModernButton
@@ -306,7 +337,7 @@ namespace MediaDownloader
                 HoverColor = Theme.BgSurfaceHover,
                 BorderColor = Theme.BorderSubtle,
                 ForeColor = Theme.TextSecondary,
-                Font = new Font("Segoe UI", 9F)
+                Font = Theme.GetFont("Segoe UI", 9F)
             };
             btnCancel.Click += (s, e) =>
             {
@@ -322,7 +353,7 @@ namespace MediaDownloader
                 Size = new Size(Dpi.Px(210), Dpi.Px(38)),
                 BaseColor = Theme.BrandPurple,
                 HoverColor = Theme.BrandPurpleHover,
-                Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 9F, FontStyle.Bold),
                 Enabled = false
             };
             btnQueue.Click += BtnQueue_Click;
@@ -422,6 +453,8 @@ namespace MediaDownloader
             else if (selectedChoice == PlaylistDownloadChoice.SingleVideoOnly)
             {
                 btnQueue.Text = "Queue Single Video";
+                // The linked video is known from the URL even if the playlist could not be listed.
+                canQueue = hasSingleVideo || totalCount > 0;
             }
             else // CustomRange
             {
@@ -441,14 +474,33 @@ namespace MediaDownloader
 
         private async void LoadPlaylistInfoAsync()
         {
-            playlistInfo = await ExternalToolService.FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, browserCookies);
+            if (lookup != null) return;
+            lookup = new CancellationTokenSource();
+            btnRetry.Visible = false;
+            lblPlaylistInfo.Text = "Inspecting playlist details...";
+            lblStatus.Text = "\u25cf Checking playlist...";
+            lblStatus.ForeColor = Theme.AccentWarning;
+            lookupStarted = DateTime.UtcNow;
+            elapsedTimer.Start();
+            try
+            {
+                playlistInfo = await ExternalToolService.FetchPlaylistInfoAsync(ytDlpPath, playlistUrl, browserCookies, LookupTimeout, lookup.Token);
+            }
+            finally
+            {
+                elapsedTimer.Stop();
+                lookup.Dispose();
+                lookup = null;
+            }
             if (IsDisposed) return;
 
             int count = ReadyVideoCount;
             if (count > 0)
             {
                 string title = !string.IsNullOrEmpty(playlistInfo.Title) ? playlistInfo.Title : "Playlist";
-                lblPlaylistInfo.Text = string.Format("{0}  \u2022  {1} videos", title, count);
+                lblPlaylistInfo.Text = playlistInfo.UnavailableCount > 0
+                    ? string.Format("{0}  \u2022  {1} videos  ({2} unavailable skipped)", title, count, playlistInfo.UnavailableCount)
+                    : string.Format("{0}  \u2022  {1} videos", title, count);
 
                 cardEntire.TitleText = string.Format("Download entire playlist ({0} videos)", count);
                 cardEntire.SubtitleText = string.Format("Queue all {0} videos as individual downloads", count);
@@ -474,6 +526,11 @@ namespace MediaDownloader
 
                 stepperFrom.MaxValue = count;
                 stepperTo.MaxValue = count;
+                if (stepperFrom.Value == 0 && stepperTo.Value == 0)
+                {
+                    stepperFrom.Value = 1;
+                    stepperTo.Value = count;
+                }
 
                 lblStatus.Text = string.Format("\u25CF {0} videos ready", count);
                 lblStatus.ForeColor = Theme.AccentSuccess;
@@ -486,10 +543,14 @@ namespace MediaDownloader
             }
             else
             {
-                lblPlaylistInfo.Text = "Could not retrieve full video list.";
-                lblStatus.Text = "\u25CF Playlist unavailable";
+                lblPlaylistInfo.Text = playlistInfo != null && playlistInfo.TimedOut
+                    ? "The playlist took too long to list. Retry, or queue the single video."
+                    : "Could not retrieve the video list.";
+                lblStatus.Text = playlistInfo != null && playlistInfo.TimedOut ? "\u25CF Timed out" : "\u25CF Playlist unavailable";
                 lblStatus.ForeColor = Theme.AccentWarning;
             }
+            btnRetry.Visible = count == 0;
+            if (count == 0 && hasSingleVideo) SelectCard(PlaylistDownloadChoice.SingleVideoOnly, false);
 
             UpdateRangeFeedback();
 
@@ -504,40 +565,46 @@ namespace MediaDownloader
 
             ResultUrls = new List<string>();
             ResultTitles = new List<string>();
+            ResultIds = new List<string>();
 
             if (selectedChoice == PlaylistDownloadChoice.EntirePlaylist)
             {
-                foreach (PlaylistEntry entry in playlistInfo.Entries)
-                {
-                    ResultUrls.Add(entry.Url);
-                    ResultTitles.Add(entry.Title);
-                }
+                foreach (PlaylistEntry entry in playlistInfo.Entries) AddResult(entry);
             }
             else if (selectedChoice == PlaylistDownloadChoice.SingleVideoOnly)
             {
                 if (hasSingleVideo && !string.IsNullOrEmpty(singleVideoUrl))
                 {
+                    PlaylistEntry entry = playlistInfo == null ? null : playlistInfo.Entries.Find(video => video.Id == singleVideoId);
                     ResultUrls.Add(singleVideoUrl);
-                    PlaylistEntry entry = playlistInfo.Entries.Find(video => video.Id == singleVideoId);
                     ResultTitles.Add(entry == null ? null : entry.Title);
+                    ResultIds.Add(singleVideoId);
                 }
                 else
                 {
-                    ResultUrls.Add(playlistInfo.Entries[0].Url);
-                    ResultTitles.Add(playlistInfo.Entries[0].Title);
+                    AddResult(playlistInfo.Entries[0]);
                 }
             }
             else // CustomRange
             {
-                for (int i = stepperFrom.Value - 1; i < stepperTo.Value; i++)
-                {
-                    ResultUrls.Add(playlistInfo.Entries[i].Url);
-                    ResultTitles.Add(playlistInfo.Entries[i].Title);
-                }
+                for (int i = stepperFrom.Value - 1; i < stepperTo.Value; i++) AddResult(playlistInfo.Entries[i]);
             }
 
             DialogResult = DialogResult.OK;
             Close();
+        }
+
+        private void AddResult(PlaylistEntry entry)
+        {
+            ResultUrls.Add(entry.Url);
+            ResultTitles.Add(entry.Title);
+            ResultIds.Add(entry.Id);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) elapsedTimer.Dispose();
+            base.Dispose(disposing);
         }
     }
 
@@ -590,7 +657,7 @@ namespace MediaDownloader
                 BorderStyle = BorderStyle.None,
                 BackColor = Color.FromArgb(17, 16, 26),
                 ForeColor = Theme.TextPrimary,
-                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 10.5F, FontStyle.Bold),
                 TextAlign = HorizontalAlignment.Center,
                 Text = MinValue.ToString()
             };
@@ -938,7 +1005,7 @@ namespace MediaDownloader
             // Title
             int textX = Dpi.Px(46);
             int textY = string.IsNullOrEmpty(SubtitleText) ? (Height / 2 - Dpi.Px(10)) : Dpi.Px(13);
-            using (Font fTitle = new Font("Segoe UI Semibold", 9.8F, FontStyle.Bold))
+            Font fTitle = Theme.GetFont("Segoe UI Semibold", 9.8F, FontStyle.Bold);
             {
                 Color titleCol = IsSelected ? Theme.BrandPurpleLight : Theme.TextPrimary;
                 TextRenderer.DrawText(g, TitleText, fTitle, new Point(textX, textY), titleCol, TextFormatFlags.NoPrefix);
@@ -947,7 +1014,7 @@ namespace MediaDownloader
             // Subtitle
             if (!string.IsNullOrEmpty(SubtitleText))
             {
-                using (Font fSub = new Font("Segoe UI", 8.2F, FontStyle.Regular))
+                Font fSub = Theme.GetFont("Segoe UI", 8.2F, FontStyle.Regular);
                 {
                     int subY = textY + Dpi.Px(21);
                     TextRenderer.DrawText(g, SubtitleText, fSub, new Point(textX, subY), Theme.TextMuted, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
@@ -957,7 +1024,7 @@ namespace MediaDownloader
             // Optional Badge on the right
             if (!string.IsNullOrEmpty(BadgeText))
             {
-                using (Font fBadge = new Font("Segoe UI Semibold", 8.2F, FontStyle.Bold))
+                Font fBadge = Theme.GetFont("Segoe UI Semibold", 8.2F, FontStyle.Bold);
                 {
                     Size bSize = TextRenderer.MeasureText(BadgeText, fBadge);
                     int bWidth = bSize.Width + Dpi.Px(14);

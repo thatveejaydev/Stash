@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using MediaDownloader;
+using Stash;
 
 internal static class UpdateServiceTests
 {

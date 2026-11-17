@@ -1,4 +1,4 @@
-namespace MediaDownloader
+namespace Stash
 {
     internal enum CookieBrowser
     {
@@ -10,6 +10,13 @@ namespace MediaDownloader
         Opera,
         Vivaldi,
         Chromium
+    }
+
+    internal enum FileNameStyle
+    {
+        Title,
+        TitleWithId,
+        UploaderAndTitle
     }
 
     public enum DownloadMode

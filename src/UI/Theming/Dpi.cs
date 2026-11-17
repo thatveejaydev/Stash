@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 
-namespace MediaDownloader
+namespace Stash
 {
     // All layout constants are authored at 96 DPI. Fonts remain in points;
     // Windows converts those to device pixels using the same system DPI.

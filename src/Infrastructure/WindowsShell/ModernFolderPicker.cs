@@ -3,7 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Native Windows Vista/10/11 File Explorer Folder Picker (IFileOpenDialog with FOS_PICKFOLDERS)
     public static class ModernFolderPicker
@@ -46,9 +46,10 @@ namespace MediaDownloader
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Fallback only if COM call ever fails
+                // Fallback only if the COM dialog fails.
+                AppLog.Error("Modern folder picker failed", ex);
                 using (FolderBrowserDialog fbd = new FolderBrowserDialog())
                 {
                     fbd.SelectedPath = initialDirectory;

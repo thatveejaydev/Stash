@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Coalesce before posting to the UI. Other output keeps its original order.
     internal sealed class ProgressOutputBuffer : IDisposable

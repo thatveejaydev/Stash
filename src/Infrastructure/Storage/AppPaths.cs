@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Resolve per-user storage through Windows, independently of the EXE location.
     public sealed class AppPaths
@@ -15,6 +15,7 @@ namespace MediaDownloader
         public string SettingsPath { get; private set; }
         public string EnginesDirectory { get; private set; }
         public string UpdatesDirectory { get; private set; }
+        public string QueuePath { get; private set; }
 
         internal AppPaths(string executableDirectory, string localAppDataDirectory)
         {
@@ -25,6 +26,7 @@ namespace MediaDownloader
             SettingsPath = Path.Combine(DataDirectory, "settings.cfg");
             EnginesDirectory = Path.Combine(DataDirectory, "bin");
             UpdatesDirectory = Path.Combine(DataDirectory, "updates");
+            QueuePath = Path.Combine(DataDirectory, "queue.json");
         }
 
         public void Initialize()

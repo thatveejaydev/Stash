@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace MediaDownloader
+namespace Stash
 {
     public sealed class CompletedDownloadDetails
     {

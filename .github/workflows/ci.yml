@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        shell: cmd
+        run: tests\run-tests.bat
+
+      - name: Build Stash.exe
+        shell: cmd
+        run: build.bat
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stash
+          path: |
+            Stash.exe
+            Stash.exe.sha256

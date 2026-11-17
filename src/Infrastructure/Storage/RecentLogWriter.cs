@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Five files including the active log, each at most 1 MiB.
     public sealed class RecentLogWriter : IDisposable

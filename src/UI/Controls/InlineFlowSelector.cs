@@ -4,7 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Inline Frameless Flow Selector ("Download  Video ⌄", "Quality  Best ⌄", etc.)
     public class InlineFlowSelector : Control
@@ -48,8 +48,8 @@ namespace MediaDownloader
         public void RecalculateWidth()
         {
             if (IconOnly) { Width = Dpi.Px(40); return; }
-            using (Font fPrefix = new Font("Segoe UI", 10F, FontStyle.Regular))
-            using (Font fValue = new Font("Segoe UI Semibold", 10F, FontStyle.Bold))
+            Font fPrefix = Theme.GetFont("Segoe UI", 10F, FontStyle.Regular);
+            Font fValue = Theme.GetFont("Segoe UI Semibold", 10F, FontStyle.Bold);
             {
                 string label = PrefixLabel == "Quality" && ValueLabel == "Best" ? "Best quality" : ValueLabel;
                 Width = TextRenderer.MeasureText(label, fValue).Width + Dpi.Px(60);
@@ -108,8 +108,8 @@ namespace MediaDownloader
                     g.DrawLine(separator, Width - Dpi.Px(1), Dpi.Px(12), Width - Dpi.Px(1), Height - Dpi.Px(12));
             }
 
-            using (Font fPrefix = new Font("Segoe UI", 10F, FontStyle.Regular))
-            using (Font fValue = new Font("Segoe UI Semibold", 10F, FontStyle.Bold))
+            Font fPrefix = Theme.GetFont("Segoe UI", 10F, FontStyle.Regular);
+            Font fValue = Theme.GetFont("Segoe UI Semibold", 10F, FontStyle.Bold);
             {
                 Color iconColor = Enabled ? Theme.TextSecondary : Theme.TextMuted;
                 using (Pen icon = new Pen(iconColor, 1.3f))

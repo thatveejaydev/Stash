@@ -5,7 +5,7 @@ using System.IO;
 using System.Net;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     public partial class MainForm : ThemedForm
     {
@@ -23,6 +23,15 @@ namespace MediaDownloader
         // Queue & Status Bar Controls
         private ModernButton btnCancelSelected;
         private ModernButton btnRemoveFinished;
+        private ModernButton btnPauseAll;
+        private readonly QueueStore queueStore = new QueueStore(AppPaths.Current.QueuePath);
+        private readonly TaskbarProgress taskbar = new TaskbarProgress();
+        private readonly System.Threading.CancellationTokenSource engineCancellation = new System.Threading.CancellationTokenSource();
+        private NotifyIcon trayIcon;
+        private bool queueWasBusy;
+        private bool clipboardListening;
+        private string ignoreClipboardText;
+        private string lastClipboardText;
         private bool engineOperationRunning;
         private ModernButton btnInformation;
         private readonly RecentLogWriter logWriter = new RecentLogWriter(Path.Combine(AppPaths.Current.DataDirectory, "logs"));
@@ -109,7 +118,8 @@ namespace MediaDownloader
 
         public MainForm()
         {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            AppLog.Connect(logWriter.WriteError);
+            ConfigureTls();
             KeyPreview = true;
             settings = AppSettings.Load();
             InitializePaths();
@@ -133,7 +143,170 @@ namespace MediaDownloader
             noticeTimer.Tick += (sender, args) => { noticeTimer.Stop(); notice.Visible = false; };
             FitInitialWindowToScreen();
             CheckToolsStatus();
-            Shown += (sender, args) => updateService.CleanupStaleFiles();
+            RestoreQueue();
+            Shown += (sender, args) =>
+            {
+                updateService.CleanupStaleFiles();
+                SweepTemporaryFoldersAsync();
+                ScheduleAutomaticEngineCheck();
+            };
+        }
+
+        // Prefer TLS 1.3 where the OS supports it, always allowing TLS 1.2.
+        private static void ConfigureTls()
+        {
+            const SecurityProtocolType Tls13 = (SecurityProtocolType)12288;
+            try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | Tls13; }
+            catch (NotSupportedException) { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; }
+        }
+
+        private void RestoreQueue()
+        {
+            List<DownloadQueueItem> restored = queueStore.Load();
+            if (restored.Count == 0) return;
+            downloadManager.AddRestoredItems(restored);
+            queueListView.AppendItems(restored);
+            UpdateQueueHeaderStats();
+            int paused = restored.FindAll(item => item.Status == QueueItemStatus.Paused).Count;
+            if (paused > 0)
+                Shown += (s, e) => ShowNotice(paused == 1 ? "1 unfinished download was restored. Resume it when ready."
+                    : paused + " unfinished downloads were restored. Use Resume All when ready.");
+            // Refresh file sizes of finished items in the background.
+            foreach (DownloadQueueItem item in restored)
+            {
+                if (item.Status != QueueItemStatus.Completed || string.IsNullOrEmpty(item.OutputFilePath)) continue;
+                DownloadQueueItem current = item;
+                CompletedDownloadDetails.ReadFileAsync(current.OutputFilePath, null).ContinueWith(task =>
+                {
+                    if (task.Status != System.Threading.Tasks.TaskStatus.RanToCompletion || IsDisposed) return;
+                    current.CompletedDetails = task.Result;
+                    queueListView.RefreshChangedItems();
+                }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
+            }
+        }
+
+        private async void SweepTemporaryFoldersAsync()
+        {
+            List<string> folders = new List<string>(settings.RecentFolders);
+            folders.Add(settings.CurrentOutputFolder);
+            List<string> inUse = new List<string>();
+            foreach (DownloadQueueItem item in downloadManager.GetItems())
+            {
+                folders.Add(item.OutputFolder);
+                inUse.Add(item.TemporaryFolder);
+            }
+            try
+            {
+                int removed = await System.Threading.Tasks.Task.Run(() =>
+                    StorageFileService.SweepOrphanedTemporaryFolders(folders, inUse, TimeSpan.FromHours(6)));
+                if (removed > 0) logWriter.Write("Removed " + removed + " leftover temporary folder(s).");
+            }
+            catch (Exception ex) { AppLog.Error("Temporary folder sweep failed", ex); }
+        }
+
+        // Accept links dragged from a browser, text, or .url shortcut files.
+        private void EnableLinkDrop(Control control)
+        {
+            control.AllowDrop = true;
+            control.DragEnter += (s, e) => e.Effect = ReadDroppedText(e.Data) != null ? DragDropEffects.Copy | DragDropEffects.Link : DragDropEffects.None;
+            control.DragDrop += (s, e) =>
+            {
+                string text = ReadDroppedText(e.Data);
+                if (text == null) return;
+                Activate();
+                BeginInvoke((Action)(() => ProcessInputText(text, InputSource.Drop)));
+            };
+            foreach (Control child in control.Controls) EnableLinkDrop(child);
+        }
+
+        private static string ReadDroppedText(IDataObject data)
+        {
+            if (data == null) return null;
+            try
+            {
+                if (data.GetDataPresent(DataFormats.UnicodeText)) return data.GetData(DataFormats.UnicodeText) as string;
+                if (data.GetDataPresent(DataFormats.Text)) return data.GetData(DataFormats.Text) as string;
+                if (data.GetDataPresent(DataFormats.FileDrop))
+                {
+                    string[] files = data.GetData(DataFormats.FileDrop) as string[];
+                    if (files == null) return null;
+                    List<string> links = new List<string>();
+                    foreach (string file in files)
+                    {
+                        if (!string.Equals(Path.GetExtension(file), ".url", StringComparison.OrdinalIgnoreCase)) continue;
+                        foreach (string line in File.ReadAllLines(file))
+                            if (line.StartsWith("URL=", StringComparison.OrdinalIgnoreCase)) links.Add(line.Substring(4).Trim());
+                    }
+                    return links.Count == 0 ? null : string.Join("\n", links);
+                }
+            }
+            catch (Exception ex) { AppLog.Error("Could not read dropped data", ex); }
+            return null;
+        }
+
+        // Clipboard watching (opt-in): links copied in other apps are queued automatically.
+        private const int WmClipboardUpdate = 0x031D;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool AddClipboardFormatListener(IntPtr hwnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool FlashWindowEx(ref FlashInfo info);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct FlashInfo { public uint Size; public IntPtr Window; public uint Flags; public uint Count; public uint Timeout; }
+
+        private void FlashWindow()
+        {
+            if (!IsHandleCreated || ContainsFocus) return;
+            FlashInfo info = new FlashInfo { Window = Handle, Flags = 0x3 | 0xC, Count = 3 }; // FLASHW_ALL | FLASHW_TIMERNOFG
+            info.Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf(info);
+            FlashWindowEx(ref info);
+        }
+
+        private void UpdateClipboardWatch()
+        {
+            if (!IsHandleCreated) return;
+            if (settings.WatchClipboard && !clipboardListening)
+            {
+                clipboardListening = AddClipboardFormatListener(Handle);
+                lastClipboardText = ReadClipboardText(); // Do not queue whatever was already copied.
+            }
+            else if (!settings.WatchClipboard && clipboardListening)
+            {
+                RemoveClipboardFormatListener(Handle);
+                clipboardListening = false;
+            }
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            clipboardListening = false;
+            UpdateClipboardWatch();
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg == WmClipboardUpdate && clipboardListening && settings.WatchClipboard && Enabled)
+                BeginInvoke((Action)OnClipboardChanged);
+        }
+
+        private void OnClipboardChanged()
+        {
+            string text = ReadClipboardText();
+            if (text == null || text.Length > 8000 || text == lastClipboardText) return;
+            lastClipboardText = text;
+            if (text == ignoreClipboardText) { ignoreClipboardText = null; return; }
+            // Only react to copies that are links, not ordinary text that happens to contain one.
+            string trimmed = text.Trim();
+            if (!trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return;
+            if (OwnedForms.Length > 0 || !Enabled) return; // A dialog is open.
+            ProcessInputText(text, InputSource.ClipboardWatch);
         }
 
         private void FitInitialWindowToScreen()
@@ -208,7 +381,7 @@ namespace MediaDownloader
             Size = new Size(Dpi.Px(1020), Dpi.Px(660));
             MinimumSize = new Size(Dpi.Px(880), Dpi.Px(520));
             StartPosition = FormStartPosition.CenterScreen;
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
+            Font = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
             ShowIcon = true;
             try
             {
@@ -254,7 +427,7 @@ namespace MediaDownloader
             {
                 Margin = new Padding(0, 0, Dpi.Px(6), 0)
             };
-            appToolTip.SetToolTip(btnPasteHero, "Paste link from clipboard & download immediately (Ctrl+V)");
+            appToolTip.SetToolTip(btnPasteHero, "Paste link from clipboard & download immediately (Ctrl+V). You can also drag links onto the window.");
             btnPasteHero.Click += (s, e) => PasteFromClipboardAndDownload();
 
             // Smaller Minimalist Toggle Switch (No icon)
@@ -334,12 +507,13 @@ namespace MediaDownloader
             {
                 Dock = DockStyle.Top,
                 Height = Dpi.Px(44),
-                ColumnCount = 3,
+                ColumnCount = 4,
                 RowCount = 1,
                 Padding = new Padding(Dpi.Px(18), Dpi.Px(8), Dpi.Px(18), Dpi.Px(4)),
                 BackColor = Theme.BgWindow
             };
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             pnlQueueBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -348,7 +522,7 @@ namespace MediaDownloader
                 Text = "QUEUE  •  0 ITEMS",
                 AutoSize = true,
                 Anchor = AnchorStyles.Left,
-                Font = new Font("Segoe UI Semibold", 8.8F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 8.8F, FontStyle.Bold),
                 ForeColor = Theme.TextMuted
             };
 
@@ -358,7 +532,7 @@ namespace MediaDownloader
                 AutoSize = true,
                 Anchor = AnchorStyles.Right,
                 Cursor = Cursors.Hand,
-                Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 8.5F, FontStyle.Bold),
                 Margin = new Padding(0, 0, Dpi.Px(10), 0),
                 ForeColor = Theme.AccentWarning
             };
@@ -372,7 +546,7 @@ namespace MediaDownloader
                 BaseColor = Color.FromArgb(46, 24, 28),
                 HoverColor = Color.FromArgb(64, 30, 36),
                 ForeColor = Color.FromArgb(252, 165, 165),
-                Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
+                Font = Theme.GetFont("Segoe UI Semibold", 8.5F, FontStyle.Bold),
                 CornerRadius = Dpi.Px(6)
             };
             btnCancelSelected.Click += BtnCancelSelected_Click;
@@ -386,24 +560,44 @@ namespace MediaDownloader
                 HoverColor = Theme.BgSurfaceHover,
                 BorderColor = Theme.BorderSubtle,
                 ForeColor = Theme.TextSecondary,
-                Font = new Font("Segoe UI", 8.5F),
+                Font = Theme.GetFont("Segoe UI", 8.5F),
                 CornerRadius = Dpi.Px(6)
             };
             btnRemoveFinished.Click += BtnRemoveFinished_Click;
+            appToolTip.SetToolTip(btnRemoveFinished, "Remove completed, cancelled and failed items from the list");
+            appToolTip.SetToolTip(btnCancelSelected, "Cancel the selected download (Del)");
+            btnCancelSelected.Enabled = false;
+
+            btnPauseAll = new ModernButton
+            {
+                Text = "Pause All",
+                Size = new Size(Dpi.Px(96), Dpi.Px(27)),
+                Margin = new Padding(0, 0, Dpi.Px(8), 0),
+                BaseColor = Theme.BgSurface,
+                HoverColor = Theme.BgSurfaceHover,
+                BorderColor = Theme.BorderSubtle,
+                ForeColor = Theme.TextSecondary,
+                Font = Theme.GetFont("Segoe UI", 8.5F),
+                CornerRadius = Dpi.Px(6),
+                Enabled = false
+            };
+            btnPauseAll.Click += BtnPauseAll_Click;
+            appToolTip.SetToolTip(btnPauseAll, "Pause or resume every download in the queue");
 
             btnInformation = new InformationIconButton
             {
                 Size = new Size(Dpi.Px(30), Dpi.Px(27)), AccessibleName = "About Stash and updates",
                 Margin = new Padding(0), BaseColor = Theme.BgTopBar,
                 HoverColor = Theme.BgSurfaceHover, BorderColor = Theme.BorderSubtle,
-                ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI Symbol", 12F), CornerRadius = Dpi.Px(6)
+                ForeColor = Theme.TextSecondary, Font = Theme.GetFont("Segoe UI Symbol", 12F), CornerRadius = Dpi.Px(6)
             };
             appToolTip.SetToolTip(btnInformation, "About Stash and updates");
             btnInformation.Click += async (s, e) => await ShowInformationAsync();
 
             pnlQueueBar.Controls.Add(lblQueueStats, 0, 0);
-            pnlQueueBar.Controls.Add(btnCancelSelected, 1, 0);
-            pnlQueueBar.Controls.Add(btnRemoveFinished, 2, 0);
+            pnlQueueBar.Controls.Add(btnPauseAll, 1, 0);
+            pnlQueueBar.Controls.Add(btnCancelSelected, 2, 0);
+            pnlQueueBar.Controls.Add(btnRemoveFinished, 3, 0);
 
             TableLayoutPanel statusBar = new TableLayoutPanel
             {
@@ -418,7 +612,7 @@ namespace MediaDownloader
             Label versionLabel = new Label
             {
                 Text = "v" + UpdateService.InstalledVersion, AutoSize = true, Anchor = AnchorStyles.Right,
-                ForeColor = Theme.TextMuted, Font = new Font("Segoe UI", 8F),
+                ForeColor = Theme.TextMuted, Font = Theme.GetFont("Segoe UI", 8F),
                 Margin = new Padding(Dpi.Px(12), 0, Dpi.Px(8), 0)
             };
             btnInformation.Anchor = AnchorStyles.Right;
@@ -454,6 +648,9 @@ namespace MediaDownloader
                 UpdateQueueHeaderStats();
             };
             queueListView.OpenFileFolderRequested += OpenCompletedItemFolder;
+            queueListView.OpenFileRequested += OpenCompletedFile;
+            queueListView.CopyUrlRequested += CopyItemUrl;
+            queueListView.SelectionChanged += (s, e) => UpdateSelectionButtons();
             pnlCenter.Controls.Add(queueListView);
 
             Controls.Add(pnlCenter);
@@ -461,6 +658,7 @@ namespace MediaDownloader
             Controls.Add(statusBar);
             Controls.Add(pnlQueueBar);
             Controls.Add(pnlTopBar);
+            EnableLinkDrop(this);
         }
 
     }

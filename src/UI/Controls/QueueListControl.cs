@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Windows.Forms;
 
-namespace MediaDownloader
+namespace Stash
 {
     // Virtual Smooth Queue Canvas for modern card-like rows
     public partial class QueueListControl : Control
@@ -52,6 +52,8 @@ namespace MediaDownloader
         public event Action<DownloadQueueItem> RetryRequested;
         public event Action<DownloadQueueItem> RemoveRequested;
         public event Action<DownloadQueueItem> OpenFileFolderRequested;
+        public event Action<DownloadQueueItem> OpenFileRequested;
+        public event Action<DownloadQueueItem> CopyUrlRequested;
 
         public QueueListControl()
         {
@@ -80,6 +82,14 @@ namespace MediaDownloader
             SelectedItem = newItems[0];
             UpdateScrollBar();
             if (scrollBar.Visible) scrollBar.Value = 0;
+            Invalidate();
+        }
+
+        internal void AppendItems(IList<DownloadQueueItem> restored)
+        {
+            if (restored == null || restored.Count == 0) return;
+            items.AddRange(restored);
+            UpdateScrollBar();
             Invalidate();
         }
 
@@ -170,6 +180,16 @@ namespace MediaDownloader
             }
         }
 
+        protected override void OnMouseDoubleClick(MouseEventArgs e)
+        {
+            base.OnMouseDoubleClick(e);
+            DownloadQueueItem hit = HitTestItem(e.Location);
+            if (hit != null && e.Button == MouseButtons.Left && hit.Status == QueueItemStatus.Completed) Raise(OpenFileRequested, hit);
+        }
+
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
@@ -191,6 +211,118 @@ namespace MediaDownloader
             }
         }
 
+        protected override bool IsInputKey(Keys keyData)
+        {
+            switch (keyData & Keys.KeyCode)
+            {
+                case Keys.Up: case Keys.Down: case Keys.Home: case Keys.End:
+                case Keys.PageUp: case Keys.PageDown: case Keys.Enter: case Keys.Space:
+                case Keys.Delete: case Keys.Apps:
+                    return true;
+            }
+            return base.IsInputKey(keyData);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (items.Count == 0) return;
+            int index = SelectedItem == null ? -1 : items.IndexOf(SelectedItem);
+            int page = Math.Max(1, ClientSize.Height / (RowHeight + RowGap));
+            int target = index;
+            switch (e.KeyCode)
+            {
+                case Keys.Up: target = Math.Max(0, index - 1); break;
+                case Keys.Down: target = Math.Min(items.Count - 1, index + 1); break;
+                case Keys.PageUp: target = Math.Max(0, index - page); break;
+                case Keys.PageDown: target = Math.Min(items.Count - 1, index + page); break;
+                case Keys.Home: target = 0; break;
+                case Keys.End: target = items.Count - 1; break;
+            }
+            if (target != index && target >= 0)
+            {
+                Select(items[target]);
+                e.Handled = true;
+                return;
+            }
+            DownloadQueueItem item = SelectedItem;
+            if (item == null) return;
+            if (e.KeyCode == Keys.Space && CanPauseOrResume(item.Status)) Raise(PauseResumeRequested, item);
+            else if (e.KeyCode == Keys.Enter && item.Status == QueueItemStatus.Completed) Raise(OpenFileRequested, item);
+            else if (e.KeyCode == Keys.Enter && item.Status == QueueItemStatus.Error) Raise(DetailsRequested, item);
+            else if (e.KeyCode == Keys.Delete && CanCancelStatus(item.Status)) Raise(CancelRequested, item);
+            else if (e.KeyCode == Keys.Delete) Raise(RemoveRequested, item);
+            else if (e.KeyCode == Keys.C && e.Control) Raise(CopyUrlRequested, item);
+            else if (e.KeyCode == Keys.Apps || (e.KeyCode == Keys.F10 && e.Shift))
+            {
+                Rectangle bounds = GetItemBounds(item);
+                ShowContextMenu(item, new Point(bounds.X + Dpi.Px(24), Math.Max(0, bounds.Y) + Dpi.Px(24)));
+            }
+            else return;
+            e.Handled = true;
+            Invalidate();
+        }
+
+        private static void Raise(Action<DownloadQueueItem> handler, DownloadQueueItem item)
+        {
+            if (handler != null) handler(item);
+        }
+
+        private void Select(DownloadQueueItem item)
+        {
+            SelectedItem = item;
+            if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty);
+            EnsureVisible(item);
+            Invalidate();
+        }
+
+        private Rectangle GetItemBounds(DownloadQueueItem item)
+        {
+            int y = -scrollBar.Value + Dpi.Px(4);
+            foreach (DownloadQueueItem candidate in items)
+            {
+                int height = GetRowHeight(candidate);
+                if (candidate == item) return new Rectangle(Dpi.Px(2), y, GetCardWidth(), height);
+                y += height + RowGap;
+            }
+            return Rectangle.Empty;
+        }
+
+        private void EnsureVisible(DownloadQueueItem item)
+        {
+            if (!scrollBar.Visible) return;
+            Rectangle bounds = GetItemBounds(item);
+            if (bounds.Top < 0) scrollBar.Value += bounds.Top - Dpi.Px(4);
+            else if (bounds.Bottom > ClientSize.Height) scrollBar.Value += bounds.Bottom - ClientSize.Height + Dpi.Px(4);
+        }
+
+        private void ShowContextMenu(DownloadQueueItem item, Point location)
+        {
+            DarkContextMenu menu = new DarkContextMenu();
+            QueueItemStatus status = item.Status;
+            if (status == QueueItemStatus.Completed)
+            {
+                menu.AddItem("Open file", "Enter", true, () => Raise(OpenFileRequested, item));
+                menu.AddItem("Show in folder", null, true, () => Raise(OpenFileFolderRequested, item));
+            }
+            if (CanPauseOrResume(status))
+                menu.AddItem(status == QueueItemStatus.Paused ? "Resume" : "Pause", "Space", true, () => Raise(PauseResumeRequested, item));
+            if (status == QueueItemStatus.Error || status == QueueItemStatus.Cancelled)
+                menu.AddItem("Retry", null, true, () => Raise(RetryRequested, item));
+            if (status == QueueItemStatus.Error)
+                menu.AddItem("Show error details", "Enter", true, () => Raise(DetailsRequested, item));
+            if (status != QueueItemStatus.Completed)
+                menu.AddItem("Open download folder", null, true, () => Raise(OpenFileFolderRequested, item));
+            menu.AddSeparator();
+            menu.AddItem("Copy link", "Ctrl+C", true, () => Raise(CopyUrlRequested, item));
+            menu.AddSeparator();
+            if (CanCancelStatus(status))
+                menu.AddItem("Cancel download", "Del", true, () => Raise(CancelRequested, item));
+            else if (status != QueueItemStatus.Merging)
+                menu.AddItem("Remove from list", "Del", true, () => Raise(RemoveRequested, item));
+            menu.Show(this, location);
+        }
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
@@ -202,6 +334,13 @@ namespace MediaDownloader
             {
                 SelectedItem = hit;
                 if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty);
+                if (e.Button == MouseButtons.Right)
+                {
+                    Invalidate();
+                    ShowContextMenu(hit, e.Location);
+                    return;
+                }
+                if (e.Button != MouseButtons.Left) return;
 
                 if (hit.Status == QueueItemStatus.Error)
                 {
@@ -348,9 +487,9 @@ namespace MediaDownloader
             string title = "Ready to Download";
             string sub = "Copy any video or audio link and click 'Paste Link' (or press Ctrl+V anywhere in this window).";
             string credit = "Developed by Vee Jay";
-            using (Font fTitle = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold))
-            using (Font fSub = new Font("Segoe UI", 9.5F, FontStyle.Regular))
-            using (Font fCredit = new Font("Segoe UI", 8.5F, FontStyle.Regular))
+            Font fTitle = Theme.GetFont("Segoe UI Semibold", 11.5F, FontStyle.Bold);
+            Font fSub = Theme.GetFont("Segoe UI", 9.5F, FontStyle.Regular);
+            Font fCredit = Theme.GetFont("Segoe UI", 8.5F, FontStyle.Regular);
             {
                 Rectangle r1 = new Rectangle(0, ClientSize.Height / 2 - Dpi.Px(36), ClientSize.Width, Dpi.Px(26));
                 Rectangle r2 = new Rectangle(0, ClientSize.Height / 2 - Dpi.Px(8), ClientSize.Width, Dpi.Px(24));
