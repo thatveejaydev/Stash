@@ -40,16 +40,7 @@ namespace Stash
             if (entries.Count == 0) return;
 
             MenuSurface surface = new MenuSurface(entries);
-            ToolStripControlHost host = new ToolStripControlHost(surface)
-            {
-                Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = surface.Size
-            };
-            ToolStripDropDown popup = new ToolStripDropDown
-            {
-                Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = surface.Size,
-                BackColor = Theme.BgSurface, DropShadowEnabled = true
-            };
-            popup.Items.Add(host);
+            ToolStripDropDown popup = BufferedDropDown.Create(surface, true);
             surface.Chosen += entry =>
             {
                 popup.Close(ToolStripDropDownCloseReason.ItemClicked);

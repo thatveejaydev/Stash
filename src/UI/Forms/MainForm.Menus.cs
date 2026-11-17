@@ -98,16 +98,7 @@ namespace Stash
         private void ShowCookiesPopup()
         {
             Panel content = BuildCookiesSubmenuPanel(null);
-            ToolStripControlHost host = new ToolStripControlHost(content)
-            {
-                Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = content.Size
-            };
-            ToolStripDropDown popup = new ToolStripDropDown
-            {
-                Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = content.Size,
-                BackColor = Theme.BgSurface, DropShadowEnabled = true
-            };
-            popup.Items.Add(host);
+            ToolStripDropDown popup = BufferedDropDown.Create(content, true);
             popup.Closed += (s, e) => BeginInvoke((Action)popup.Dispose);
             popup.Show(btnCookies, new Point(btnCookies.Width - popup.Width, -popup.Height - Dpi.Px(6)));
         }
@@ -185,17 +176,19 @@ namespace Stash
             }
 
             int leftHeight = nextRowTop + Dpi.Px(4);
-            int[] submenuHeights = new int[rows.Count];
+            // Build every submenu once per opening and reuse it; rebuilding on each hover caused
+            // an empty frame while the new panel was created and painted.
+            Panel[] submenus = new Panel[rows.Count];
             int totalHeight = leftHeight;
             for (int i = 0; i < rows.Count; i++)
             {
-                using (Panel probe = rows[i].BuildSubmenu(rows[i].Row)) submenuHeights[i] = probe.Height;
-                totalHeight = Math.Max(totalHeight, submenuHeights[i]);
+                submenus[i] = rows[i].BuildSubmenu(rows[i].Row);
+                totalHeight = Math.Max(totalHeight, submenus[i].Height);
             }
             // The category list sits at the top; taller submenus extend below it.
             const int leftTop = 0;
 
-            Panel rootContainer = new Panel { BackColor = Theme.BgWindow, Width = leftWidth + gap + rightMaxWidth, Height = totalHeight };
+            BufferedPanel rootContainer = new BufferedPanel { BackColor = Theme.BgSurface, Width = leftWidth + gap + rightMaxWidth, Height = totalHeight };
             Panel pnlLeft = Theme.CreatePopupPanel(leftWidth, leftHeight);
             pnlLeft.Location = new Point(rightMaxWidth + gap, leftTop);
             pnlLeft.Paint += (s, e) =>
@@ -203,36 +196,37 @@ namespace Stash
                 using (Pen line = new Pen(Theme.BorderSubtle))
                     foreach (int y in separators) e.Graphics.DrawLine(line, Dpi.Px(12), y, pnlLeft.Width - Dpi.Px(12), y);
             };
-            Panel pnlRightHost = new Panel { BackColor = Theme.BgSurface, Width = rightMaxWidth, Height = Dpi.Px(76), Visible = false };
-
-            ToolStripControlHost host = new ToolStripControlHost(rootContainer)
+            rootContainer.Controls.Add(pnlLeft);
+            for (int i = 0; i < rows.Count; i++)
             {
-                Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = rootContainer.Size
-            };
-            popup = new ToolStripDropDown
-            {
-                Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = rootContainer.Size,
-                BackColor = Theme.BgSurface, DropShadowEnabled = false
-            };
-            popup.Items.Add(host);
+                Panel submenu = submenus[i];
+                int preferredTop = leftTop + rows[i].Row.Top - Dpi.Px(4);
+                submenu.Location = new Point(pnlLeft.Left - gap - submenu.Width, Math.Max(0, Math.Min(preferredTop, totalHeight - submenu.Height)));
+                submenu.Visible = false;
+                rootContainer.Controls.Add(submenu);
+            }
 
+            popup = BufferedDropDown.Create(rootContainer, false);
+            int currentSubmenuIndex = -1;
+
+            // Only the category list and the open submenu are visible; the rest of the popup is clipped away.
             Action updatePopupRegion = () =>
             {
                 Region reg = new Region(pnlLeft.Bounds);
-                if (pnlRightHost.Visible)
+                if (currentSubmenuIndex >= 0)
                 {
+                    Rectangle sub = submenus[currentSubmenuIndex].Bounds;
                     // Bridge the gap so moving left into a submenu stays inside the popup.
-                    int top = Math.Max(pnlLeft.Top, pnlRightHost.Top);
-                    int bottom = Math.Min(pnlLeft.Bottom, pnlRightHost.Bottom);
-                    if (bottom > top) reg.Union(new Rectangle(pnlRightHost.Right, top, gap, bottom - top));
-                    reg.Union(pnlRightHost.Bounds);
+                    int top = Math.Max(pnlLeft.Top, sub.Top);
+                    int bottom = Math.Min(pnlLeft.Bottom, sub.Bottom);
+                    if (bottom > top) reg.Union(new Rectangle(sub.Right, top, gap, bottom - top));
+                    reg.Union(sub);
                 }
                 Region previous = popup.Region;
                 popup.Region = reg;
                 if (previous != null) previous.Dispose();
             };
 
-            int currentSubmenuIndex = -1;
             List<Action> openers = new List<Action>();
             for (int i = 0; i < rows.Count; i++)
             {
@@ -240,28 +234,20 @@ namespace Stash
                 SettingsRow option = rows[i];
                 Action open = () =>
                 {
-                    if (currentSubmenuIndex == index && pnlRightHost.Visible) return;
-                    currentSubmenuIndex = index;
+                    if (currentSubmenuIndex == index) return;
+                    rootContainer.SuspendLayout();
                     foreach (SettingsRow other in rows)
                     {
-                        other.Row.IsSelected = other == option;
+                        bool selected = other == option;
+                        if (other.Row.IsSelected == selected) continue;
+                        other.Row.IsSelected = selected;
                         other.Row.Invalidate();
                     }
-                    Panel childPanel = option.BuildSubmenu(option.Row);
-                    pnlRightHost.SuspendLayout();
-                    // Dispose the previous submenu instead of leaking its handles.
-                    List<Control> old = new List<Control>();
-                    foreach (Control c in pnlRightHost.Controls) old.Add(c);
-                    pnlRightHost.Controls.Clear();
-                    foreach (Control c in old) c.Dispose();
-                    int preferredTop = leftTop + option.Row.Top - Dpi.Px(4);
-                    int top = Math.Max(0, Math.Min(preferredTop, totalHeight - childPanel.Height));
-                    pnlRightHost.Location = new Point(pnlLeft.Left - gap - childPanel.Width, top);
-                    pnlRightHost.Size = childPanel.Size;
-                    childPanel.Location = Point.Empty;
-                    pnlRightHost.Controls.Add(childPanel);
-                    pnlRightHost.Visible = true;
-                    pnlRightHost.ResumeLayout();
+                    int previous = currentSubmenuIndex;
+                    currentSubmenuIndex = index;
+                    submenus[index].Visible = true;
+                    if (previous >= 0) submenus[previous].Visible = false;
+                    rootContainer.ResumeLayout();
                     updatePopupRegion();
                 };
                 openers.Add(open);
@@ -270,8 +256,6 @@ namespace Stash
                 pnlLeft.Controls.Add(option.Row);
             }
 
-            rootContainer.Controls.Add(pnlLeft);
-            rootContainer.Controls.Add(pnlRightHost);
             if (initialRow >= 0 && initialRow < openers.Count) openers[initialRow]();
             updatePopupRegion();
 
@@ -334,8 +318,18 @@ namespace Stash
                 SetBadge(parentRow, IsVideoFormat ? QualityShortNames[index] : "Video only");
                 UpdatePreset();
             });
-            if (!IsVideoFormat)
-                foreach (Control control in panel.Controls) ((PopupMenuRow)control).TitleOverrideColor = Theme.TextMuted;
+            // Submenus are reused while the popup is open, so re-check the format each time it shows.
+            Action applyFormat = () =>
+            {
+                foreach (Control control in panel.Controls)
+                {
+                    PopupMenuRow row = (PopupMenuRow)control;
+                    row.TitleOverrideColor = IsVideoFormat ? Color.Empty : Theme.TextMuted;
+                    row.Invalidate();
+                }
+            };
+            applyFormat();
+            panel.VisibleChanged += (s, e) => { if (panel.Visible) applyFormat(); };
             return panel;
         }
 
