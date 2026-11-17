@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.7
 
 ### Redesign
 - **One Link Field:** A single field replaces the Paste Link button and the toolbar. Paste or type a link and press Enter or **Download**; an empty field downloads from the clipboard.
@@ -9,14 +9,14 @@
 - **Quieter Cards:** Each card shows its own buttons (pause, cancel, retry, details). Completed downloads show open, folder and more buttons on hover.
 - **Calmer Footer:** The footer shows a short queue summary and only mentions the engines when they need attention. Engine updates moved to **About**.
 - **Consistent Dialogs:** About, error details, rename, playlist and quit dialogs share one layout, button style and sentence-case wording.
+- **Smoother Menus:** Dropdowns and the right-click menu appear fully drawn in one frame, without flashing while you move between options.
 
 ### New Features
 - **Resume After Closing:** Closing Stash during downloads asks whether to pause them and continue next time, cancel them, or keep downloading. The queue, including finished history, is restored on the next launch.
-- **Pause All / Resume All:** One button pauses or resumes the whole queue.
 - **Drag and Drop:** Drop links, text, or `.url` shortcuts onto the window to queue them.
 - **Queue Keyboard and Menu:** Use arrow keys, Space (pause/resume), Enter (open file or error details), Del (cancel/remove), Ctrl+C (copy link), and a right-click menu on each card. Double-click a finished card to open the file.
-- **File Name Style:** Choose Title, Title [ID], or Channel - Title under Options.
-- **Clipboard Watching (opt-in):** Under Options → Clipboard, Stash can queue links you copy in other apps.
+- **File Name Style:** Choose Title, Title [ID], or Channel - Title under **More options**.
+- **Clipboard Watching (opt-in):** Under **More options** → **Clipboard**, Stash can queue links you copy in other apps.
 - **Notifications:** The taskbar button shows queue progress, and a notification appears when the queue finishes while Stash is in the background.
 - **Engine Updates:** yt-dlp is checked for updates once a day when nothing is downloading. FFmpeg is refreshed when it is over 30 days old, and engine downloads show progress.
 
