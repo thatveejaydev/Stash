@@ -561,9 +561,9 @@ namespace Stash
             menu.AddItem("Copy link", "Ctrl+C", true, () => Raise(CopyUrlRequested, item));
             menu.AddSeparator();
             if (DownloadManager.CanCancel(status))
-                menu.AddItem("Cancel download", "Del", true, () => Raise(CancelRequested, item));
+                menu.AddItem("Cancel download", "Del", true, () => Raise(CancelRequested, item), true);
             else
-                menu.AddItem("Remove from list", "Del", true, () => Raise(RemoveRequested, item));
+                menu.AddItem("Remove from list", "Del", true, () => Raise(RemoveRequested, item), true);
             menu.Show(this, location);
         }
 

@@ -142,15 +142,25 @@ namespace Stash
             int rightMaxWidth = Dpi.Px(270);
             ToolStripDropDown popup = null;
 
+            int separatorGap = Dpi.Px(9);
+            int nextRowTop = Dpi.Px(4);
+            List<int> separators = new List<int>();
             List<SettingsRow> rows = new List<SettingsRow>();
             Action<string, string, Func<PopupMenuRow, Panel>> addRow = (title, badge, build) =>
             {
                 PopupMenuRow row = new PopupMenuRow(title, badge + "   ◂", null, false, "")
                 {
-                    Location = new Point(Dpi.Px(4), Dpi.Px(4) + rows.Count * rowStep),
+                    Location = new Point(Dpi.Px(4), nextRowTop),
                     Width = leftWidth - Dpi.Px(8)
                 };
                 rows.Add(new SettingsRow { Row = row, BuildSubmenu = build });
+                nextRowTop += rowStep;
+            };
+            // A thin line between groups of related settings.
+            Action addSeparator = () =>
+            {
+                separators.Add(nextRowTop + separatorGap / 2);
+                nextRowTop += separatorGap;
             };
             if (!moreOptions)
             {
@@ -160,16 +170,21 @@ namespace Stash
             }
             else
             {
+                // The file you get
                 addRow("Subtitles", GetSubtitlesShortDisplayName(), BuildSubtitlesSubmenuPanel);
                 addRow("Embed", GetEmbedShortDisplayName(), BuildEmbedSubmenuPanel);
+                addRow("File name", GetFileNameStyleShortName(settings.FileNameStyle), BuildFileNameSubmenuPanel);
+                addSeparator();
+                // How fast it downloads
                 addRow("Parallel", settings.ParallelCount + " at once", BuildParallelSubmenuPanel);
                 addRow("Speed boost", settings.ConcurrentFragments + "x", BuildTurboSubmenuPanel);
-                addRow("File name", GetFileNameStyleShortName(settings.FileNameStyle), BuildFileNameSubmenuPanel);
+                addSeparator();
+                // Where links and sign-ins come from
                 addRow("Cookies", GetCookieShortName(settings.BrowserCookies), BuildCookiesSubmenuPanel);
                 addRow("Clipboard", settings.WatchClipboard ? "Watching" : "Off", BuildClipboardSubmenuPanel);
             }
 
-            int leftHeight = rows.Count * rowStep + Dpi.Px(8);
+            int leftHeight = nextRowTop + Dpi.Px(4);
             int[] submenuHeights = new int[rows.Count];
             int totalHeight = leftHeight;
             for (int i = 0; i < rows.Count; i++)
@@ -183,6 +198,11 @@ namespace Stash
             Panel rootContainer = new Panel { BackColor = Theme.BgWindow, Width = leftWidth + gap + rightMaxWidth, Height = totalHeight };
             Panel pnlLeft = Theme.CreatePopupPanel(leftWidth, leftHeight);
             pnlLeft.Location = new Point(rightMaxWidth + gap, leftTop);
+            pnlLeft.Paint += (s, e) =>
+            {
+                using (Pen line = new Pen(Theme.BorderSubtle))
+                    foreach (int y in separators) e.Graphics.DrawLine(line, Dpi.Px(12), y, pnlLeft.Width - Dpi.Px(12), y);
+            };
             Panel pnlRightHost = new Panel { BackColor = Theme.BgSurface, Width = rightMaxWidth, Height = Dpi.Px(76), Visible = false };
 
             ToolStripControlHost host = new ToolStripControlHost(rootContainer)
@@ -234,7 +254,7 @@ namespace Stash
                     foreach (Control c in pnlRightHost.Controls) old.Add(c);
                     pnlRightHost.Controls.Clear();
                     foreach (Control c in old) c.Dispose();
-                    int preferredTop = leftTop + index * rowStep;
+                    int preferredTop = leftTop + option.Row.Top - Dpi.Px(4);
                     int top = Math.Max(0, Math.Min(preferredTop, totalHeight - childPanel.Height));
                     pnlRightHost.Location = new Point(pnlLeft.Left - gap - childPanel.Width, top);
                     pnlRightHost.Size = childPanel.Size;
