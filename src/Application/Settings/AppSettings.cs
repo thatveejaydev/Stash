@@ -49,8 +49,47 @@ namespace Stash
         }
         public string CurrentOutputFolder { get; set; }
         public List<string> RecentFolders { get; set; }
-        public int FormatIndex { get; set; }
+        private int formatIndex;
+        public int FormatIndex
+        {
+            get { return formatIndex; }
+            set
+            {
+                formatIndex = value;
+                DownloadMode mode = (DownloadMode)value;
+                if (IsVideoMode(mode)) VideoFormat = mode;
+                if (IsAudioMode(mode)) AudioFormat = mode;
+            }
+        }
+        internal DownloadMode VideoFormat { get; private set; }
+        internal DownloadMode AudioFormat { get; private set; }
+        internal DownloadKind SelectedKind
+        {
+            get
+            {
+                DownloadMode mode = (DownloadMode)FormatIndex;
+                if (mode == DownloadMode.TranscriptOnly) return DownloadKind.Transcript;
+                return IsAudioMode(mode) ? DownloadKind.Audio : DownloadKind.Video;
+            }
+            set
+            {
+                FormatIndex = (int)(value == DownloadKind.Transcript ? DownloadMode.TranscriptOnly :
+                    value == DownloadKind.Audio ? AudioFormat : VideoFormat);
+            }
+        }
+
+        private static bool IsVideoMode(DownloadMode mode)
+        {
+            return mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv;
+        }
+
+        private static bool IsAudioMode(DownloadMode mode)
+        {
+            return mode >= DownloadMode.BestAudioOnlyMp3 && mode <= DownloadMode.BestAudioOnlyWav;
+        }
         public int QualityIndex { get; set; }
+        internal TranscriptFormat TranscriptFormat { get; set; }
+        internal string TranscriptLanguage { get; set; }
         public bool EmbedMetadata { get; set; }
         public bool EmbedThumbnail { get; set; }
         public int ParallelCount { get; set; }
@@ -74,6 +113,7 @@ namespace Stash
             CurrentOutputFolder = defaultDownloads;
             RecentFolders = new List<string> { defaultDownloads };
             FormatIndex = 0;
+            AudioFormat = DownloadMode.BestAudioOnlyMp3;
             QualityIndex = 0;
             EmbedMetadata = true;
             EmbedThumbnail = true;
@@ -160,6 +200,7 @@ namespace Stash
                 if (!File.Exists(path)) { s.Save(); return s; }
 
                 List<string> loadedHistory = new List<string>();
+                DownloadMode? savedVideoFormat = null, savedAudioFormat = null;
                 foreach (string rawLine in File.ReadAllLines(path, Encoding.UTF8))
                 {
                     string line = rawLine.Trim();
@@ -174,6 +215,7 @@ namespace Stash
                     bool parsedBool;
                     CookieBrowser parsedBrowser;
                     FileNameStyle parsedStyle;
+                    TranscriptFormat parsedTranscriptFormat;
                     long parsedTicks;
                     if (key == "CurrentOutputFolder" && !string.IsNullOrEmpty(val))
                         s.CurrentOutputFolder = ResolveSavedFolder(val) ?? GetDownloadsFolder();
@@ -183,9 +225,18 @@ namespace Stash
                         if (folder != null) loadedHistory.Add(folder);
                     }
                     else if (key == "FormatIndex" && int.TryParse(val, out parsedInt))
-                        s.FormatIndex = Math.Max(0, Math.Min((int)DownloadMode.BestAudioOnlyWav, parsedInt));
+                        s.FormatIndex = Enum.IsDefined(typeof(DownloadMode), parsedInt) ? parsedInt : 0;
+                    else if (key == "VideoFormat" && int.TryParse(val, out parsedInt) && IsVideoMode((DownloadMode)parsedInt))
+                        savedVideoFormat = (DownloadMode)parsedInt;
+                    else if (key == "AudioFormat" && int.TryParse(val, out parsedInt) && IsAudioMode((DownloadMode)parsedInt))
+                        savedAudioFormat = (DownloadMode)parsedInt;
                     else if (key == "QualityIndex" && int.TryParse(val, out parsedInt))
                         s.QualityIndex = Math.Max(0, Math.Min(6, parsedInt));
+                    else if (key == "TranscriptLanguage" && TranscriptCaptions.IsLanguageCode(val))
+                        s.TranscriptLanguage = val;
+                    else if (key == "TranscriptFormat" && Enum.TryParse(val, true, out parsedTranscriptFormat) &&
+                        Enum.IsDefined(typeof(TranscriptFormat), parsedTranscriptFormat))
+                        s.TranscriptFormat = parsedTranscriptFormat;
                     else if (key == "EmbedMetadata" && bool.TryParse(val, out parsedBool))
                         s.EmbedMetadata = parsedBool;
                     else if (key == "EmbedThumbnail" && bool.TryParse(val, out parsedBool))
@@ -211,6 +262,8 @@ namespace Stash
                         s.LastEngineCheckUtc = new DateTime(parsedTicks, DateTimeKind.Utc);
                 }
 
+                if (savedVideoFormat.HasValue && s.SelectedKind != DownloadKind.Video) s.VideoFormat = savedVideoFormat.Value;
+                if (savedAudioFormat.HasValue && s.SelectedKind != DownloadKind.Audio) s.AudioFormat = savedAudioFormat.Value;
                 if (loadedHistory.Count > 0)
                 {
                     s.RecentFolders = loadedHistory;
@@ -229,7 +282,11 @@ namespace Stash
                 StringBuilder sb = new StringBuilder();
                 sb.AppendLine("CurrentOutputFolder=" + SerializeFolder(CurrentOutputFolder));
                 sb.AppendLine("FormatIndex=" + FormatIndex);
+                sb.AppendLine("VideoFormat=" + (int)VideoFormat);
+                sb.AppendLine("AudioFormat=" + (int)AudioFormat);
                 sb.AppendLine("QualityIndex=" + QualityIndex);
+                sb.AppendLine("TranscriptLanguage=" + TranscriptLanguage);
+                sb.AppendLine("TranscriptFormat=" + TranscriptFormat);
                 sb.AppendLine("EmbedMetadata=" + EmbedMetadata);
                 sb.AppendLine("EmbedThumbnail=" + EmbedThumbnail);
                 sb.AppendLine("ParallelCount=" + ParallelCount);

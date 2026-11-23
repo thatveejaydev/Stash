@@ -32,6 +32,8 @@ namespace Stash
             public bool EmbedThumbnail { get; set; }
             public bool EmbedSubtitles { get; set; }
             public bool IncludeAutoCaptions { get; set; }
+            public string TranscriptFormat { get; set; }
+            public string TranscriptLanguage { get; set; }
             public string BrowserCookies { get; set; }
             public string FileNameStyle { get; set; }
             public int ConcurrentFragments { get; set; }
@@ -62,6 +64,7 @@ namespace Stash
                     Mode = (int)item.Mode, Resolution = (int)item.Resolution,
                     EmbedMetadata = item.EmbedMetadata, EmbedThumbnail = item.EmbedThumbnail,
                     EmbedSubtitles = item.EmbedSubtitles, IncludeAutoCaptions = item.IncludeAutoCaptions,
+                    TranscriptFormat = item.TranscriptFormat.ToString(), TranscriptLanguage = item.TranscriptLanguage,
                     BrowserCookies = item.BrowserCookies.ToString(), FileNameStyle = item.FileNameStyle.ToString(),
                     ConcurrentFragments = item.ConcurrentFragments, BadgeLabel = item.BadgeLabel,
                     OutputFolder = item.OutputFolder, TemporaryFolder = item.TemporaryFolder,
@@ -113,6 +116,10 @@ namespace Stash
                 item.SourceId = record.SourceId;
                 item.EmbedSubtitles = record.EmbedSubtitles;
                 item.IncludeAutoCaptions = record.IncludeAutoCaptions;
+                TranscriptFormat transcriptFormat;
+                if (Enum.TryParse(record.TranscriptFormat, true, out transcriptFormat) &&
+                    Enum.IsDefined(typeof(TranscriptFormat), transcriptFormat)) item.TranscriptFormat = transcriptFormat;
+                if (TranscriptCaptions.IsLanguageCode(record.TranscriptLanguage)) item.TranscriptLanguage = record.TranscriptLanguage;
                 CookieBrowser browser;
                 if (Enum.TryParse(record.BrowserCookies, true, out browser) && Enum.IsDefined(typeof(CookieBrowser), browser)) item.BrowserCookies = browser;
                 FileNameStyle style;

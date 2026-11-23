@@ -162,6 +162,37 @@ namespace Stash
             catch (UnauthorizedAccessException) { }
         }
 
+        internal static string FindTranscriptCaption(DownloadQueueItem item, string extension)
+        {
+            string folder = GetValidatedTemporaryFolder(item);
+            string[] files = Directory.GetFiles(folder, "caption.*" + extension);
+            if (files.Length != 1 || new FileInfo(files[0]).Length == 0)
+                throw new IOException("The engine did not save a usable caption file.");
+            return files[0];
+        }
+
+        internal static string PublishTranscript(DownloadQueueItem item, string sourcePath, string baseName, string extension)
+        {
+            string stem = baseName.Split('.')[0];
+            if (Regex.IsMatch(stem, @"\A(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                baseName = "_" + baseName;
+            for (int copy = 1; copy <= 999; copy++)
+            {
+                string name = copy == 1 ? baseName : baseName + " (" + copy + ")";
+                string destination = Path.Combine(item.OutputFolder, name + extension);
+                try
+                {
+                    File.Move(sourcePath, destination);
+                    return destination;
+                }
+                catch (IOException)
+                {
+                    if (!File.Exists(destination) && !Directory.Exists(destination)) throw;
+                }
+            }
+            throw new IOException("Could not find an available name for the transcript.");
+        }
+
         public static Task CleanupEmptyTemporaryFolderAsync(DownloadQueueItem item)
         {
             string folder = GetValidatedTemporaryFolder(item);

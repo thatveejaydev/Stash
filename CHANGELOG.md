@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.8
+
+### New Features
+- **Transcript Downloads:** A new **Transcript** mode saves a video's captions as SRT, VTT, TXT with timestamps, or TXT as plain paragraphs. Repeated lines from rolling auto-captions are removed from TXT exports.
+- **Caption Languages:** For a single video, Stash checks which captions exist before downloading, lists each language as **Creator** or **Auto**, and says whether the chosen language is available. **Original** picks the video's own language; batches can choose from common languages instead.
+- **Transcript Files:** Transcripts are saved as "Title [language]" next to your other downloads, open in Notepad from the queue, and keep their language and format when the queue is restored.
+
+### Redesign
+- **Mode Picker:** Choose **Video**, **Audio**, or **Transcript** under the link field. Each mode remembers its own format, and the download button names what it will download.
+- **Settings Beside the Mode:** Format, quality (or caption language and transcript format), and the save folder each have their own dropdown, replacing the single preset chip. The gear opens the remaining options and hides those that don't apply to transcripts.
+- **Matching Dropdowns:** Format, quality and language menus share the folder menu's style. Long language lists scroll.
+- **Rounded Controls:** The mode picker is one rounded switch, and dropdown buttons have clean rounded corners.
+- **Compact Header:** The link field and controls take less space. The hint line is gone; status messages only appear when there is something to report.
+
+### Improvements & Fixes
+- **Paste Shortcuts:** Ctrl+V or Shift+Insert anywhere in the window downloads the copied links right away; inside the link field they paste normally. Dropped links go into the link field so you can pick a mode first, and pressing Enter with an empty field still uses the clipboard.
+- **Inline Messages:** Invalid links, an empty clipboard, and engine preparation are reported under the link field instead of in pop-up windows.
+- **Partial Batches:** If only some links in a batch are queued, the rest stay in the field so they can be submitted again.
+- **Duplicate Links:** The same link can be queued as a video and as a transcript, or as transcripts in different languages or formats.
+- **Caption Errors:** Missing captions and caption files without readable text show their own explanation and advice.
+
 ## v0.2.7
 
 ### Redesign

@@ -42,30 +42,6 @@ namespace Stash
         private string ytDlpPath;
         private string ffmpegPath;
 
-        // Short names used in the preset chip ("MP4 · Best · Downloads").
-        private static readonly string[] FormatShortNames = { "MP4", "MKV", "MP3", "M4A", "FLAC", "WAV" };
-        private static readonly string[] QualityShortNames = { "Best", "4K", "1440p", "1080p", "720p", "480p", "360p" };
-
-        private static readonly string[] FormatPopupTitles =
-        {
-            "Video (MP4)", "Video (MKV)", "Audio (MP3)", "Audio (M4A)", "Audio (FLAC)", "Audio (WAV)"
-        };
-
-        private static readonly string[] FormatPopupRightTags =
-        {
-            "Best compatibility", "Best source quality", "320 kbps", "Original AAC", "Lossless", "16-bit PCM"
-        };
-
-        private static readonly string[] QualityPopupTitles =
-        {
-            "Best available", "4K UHD", "2K QHD", "Full HD", "HD", "SD", "Data saver"
-        };
-
-        private static readonly string[] QualityPopupRightTags =
-        {
-            "Highest", "2160p", "1440p", "1080p", "720p", "480p", "360p"
-        };
-
         public MainForm()
         {
             AppLog.Connect(logWriter.WriteError);
@@ -124,7 +100,8 @@ namespace Stash
             // Refresh file sizes of finished items in the background.
             foreach (DownloadQueueItem item in restored)
             {
-                if (item.Status != QueueItemStatus.Completed || string.IsNullOrEmpty(item.OutputFilePath)) continue;
+                if (item.Status != QueueItemStatus.Completed || item.Mode == DownloadMode.TranscriptOnly ||
+                    string.IsNullOrEmpty(item.OutputFilePath)) continue;
                 DownloadQueueItem current = item;
                 CompletedDownloadDetails.ReadFileAsync(current.OutputFilePath, null).ContinueWith(task =>
                 {
@@ -171,7 +148,7 @@ namespace Stash
                 string text = ReadDroppedText(e.Data);
                 if (text == null) return;
                 Activate();
-                BeginInvoke((Action)(() => ProcessInputText(text, InputSource.Drop)));
+                BeginInvoke((Action)(() => linkBar.Stage(text, false)));
             };
             foreach (Control child in control.Controls) EnableLinkDrop(child);
         }
@@ -279,8 +256,7 @@ namespace Stash
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-            // Typing or pasting into the link field behaves like a normal text box.
-            if (ActiveControl is TextBox || (linkBar != null && linkBar.InputFocused)) return;
+            if (linkBar == null) return;
             if (e.KeyCode == Keys.L && e.Control)
             {
                 e.SuppressKeyPress = true;
@@ -290,7 +266,9 @@ namespace Stash
             if ((e.Control && e.KeyCode == Keys.V) || (e.Shift && e.KeyCode == Keys.Insert))
             {
                 e.SuppressKeyPress = true;
-                PasteFromClipboardAndDownload();
+                // In the link field, paste like a normal text box; anywhere else, download right away.
+                if (linkBar.InputFocused) StageClipboardLinks(true);
+                else DownloadClipboardLinks();
             }
         }
 
@@ -326,12 +304,12 @@ namespace Stash
 
             appToolTip = new ToolTip();
 
-            // 1. Header: one link field with the download preset and the Download button.
+            // 1. Header: the link, mode and its relevant settings.
             Panel header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = Dpi.Px(96),
-                Padding = new Padding(Dpi.Px(20), Dpi.Px(18), Dpi.Px(20), 0),
+                Height = Dpi.Px(100),
+                Padding = new Padding(Dpi.Px(20), Dpi.Px(12), Dpi.Px(20), 0),
                 BackColor = Theme.BgTopBar
             };
             header.Paint += (s, e) =>
@@ -341,22 +319,22 @@ namespace Stash
             };
 
             linkBar = new LinkInputBar { Dock = DockStyle.Top };
+            AcceptButton = linkBar.DownloadAction;
             linkBar.SubmitRequested += SubmitLink;
-            linkBar.PresetClicked += (s, e) => ShowSettingsPopup(linkBar.PresetAnchor, false, -1);
-            linkBar.OptionsClicked += (s, e) => ShowSettingsPopup(linkBar.OptionsAnchor, true, -1);
-            appToolTip.SetToolTip(linkBar.OptionsAnchor, "Subtitles, embedding, parallel downloads, speed, file names, cookies and clipboard");
-
-            Label hint = new Label
+            linkBar.LinkChanged += (s, e) => RefreshCaptionPreview();
+            linkBar.ModeChanged += kind =>
             {
-                Text = "Ctrl+V anywhere also works. You can drag links onto the window, too.",
-                Dock = DockStyle.Top,
-                Height = Dpi.Px(26),
-                Padding = new Padding(Dpi.Px(4), Dpi.Px(7), 0, 0),
-                ForeColor = Theme.TextMuted,
-                Font = Theme.GetFont("Segoe UI", 8.5F),
-                UseMnemonic = false
+                settings.SelectedKind = kind;
+                settings.Save();
+                UpdateHeaderSettings();
+                RefreshCaptionPreview();
             };
-            header.Controls.Add(hint);
+            linkBar.FormatAnchor.Click += (s, e) => ShowPrimaryChoice();
+            linkBar.DetailAnchor.Click += (s, e) => ShowDetailChoice();
+            linkBar.FolderAnchor.Click += (s, e) => ShowFolderPopup(linkBar.FolderAnchor);
+            linkBar.OptionsAnchor.Click += (s, e) => ShowSettingsPopup(linkBar.OptionsAnchor);
+            appToolTip.SetToolTip(linkBar.OptionsAnchor, "More options");
+            linkBar.SizeChanged += (s, e) => header.Height = header.Padding.Top + linkBar.Height + Dpi.Px(12);
             header.Controls.Add(linkBar);
 
             // 2. Queue
@@ -458,7 +436,8 @@ namespace Stash
             Controls.Add(pnlCenter);
             Controls.Add(footer);
             Controls.Add(header);
-            UpdatePreset();
+            UpdateHeaderSettings();
+            RefreshCaptionPreview();
             UpdateBrowserCookiesTooltip();
             EnableLinkDrop(this);
         }
@@ -470,15 +449,5 @@ namespace Stash
             return button;
         }
 
-        private void SubmitLink(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                PasteFromClipboardAndDownload();
-                return;
-            }
-            if (DownloadUrlValidator.ExtractUrls(text).Count > 0) linkBar.Clear();
-            ProcessInputText(text, InputSource.Paste);
-        }
     }
 }

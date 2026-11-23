@@ -27,8 +27,8 @@ Stash is powered by two open-source tools:
 
 - Download video and audio from [**websites**](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) supported by yt-dlp, including YouTube, Instagram, TikTok, Facebook, Vimeo, and SoundCloud.
 - Download individual videos, Shorts, playlists, albums, and other supported collections.
-- Paste one link or multiple links at once.
-- Paste a link into the link field and click **Download**, or press `Ctrl+V` or `Shift+Insert` anywhere in the window.
+- Paste or drop one or more links into Stash, choose **Video**, **Audio**, or **Transcript**, then press Enter or click the download button.
+- A batch uses the same settings for each link. Stash remembers your format choices for each mode.
 
 ### Choose your format and quality
 
@@ -36,6 +36,7 @@ Stash is powered by two open-source tools:
 - Choose the best available quality or limit downloads to **4K, 1440p, 1080p, 720p, 480p, or 360p**.
 - Extract audio as **MP3, M4A, FLAC, or WAV**. 
 - Automatically combines separate video and audio into one finished file.
+- Export source captions as **SRT**, **VTT**, or **TXT** with timestamps or plain paragraphs. For a single video, Stash shows which caption languages are available before downloading.
 
 ### Download playlists
 

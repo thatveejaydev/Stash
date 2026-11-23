@@ -63,6 +63,7 @@ namespace Stash
                 return;
             }
             engineOperationRunning = true;
+            RefreshCaptionPreview();
             lblToolsStatus.ForeColor = Theme.TextSecondary;
             lblToolsStatus.Text = "Preparing download engines…";
             lblToolsStatus.Visible = true;
@@ -122,6 +123,7 @@ namespace Stash
                 {
                     lblToolsStatus.Cursor = Cursors.Hand;
                     CheckToolsStatus();
+                    RefreshCaptionPreview();
                     // Links queued while engines were being replaced start now.
                     ProcessQueue();
                 }

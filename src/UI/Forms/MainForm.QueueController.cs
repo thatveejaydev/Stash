@@ -10,19 +10,30 @@ namespace Stash
 {
     public partial class MainForm
     {
-        private enum InputSource { Paste, Drop, ClipboardWatch }
+        private enum InputSource { Paste, ClipboardWatch }
 
-        private void PasteFromClipboardAndDownload()
+        private void StageClipboardLinks(bool insert)
         {
             string rawInput = ReadClipboardText();
             if (rawInput == null)
             {
-                MessageBox.Show(this,
-                    "Your clipboard is empty or busy. Copy a video, audio, or playlist link first, then click 'Paste Link' or press Ctrl+V.",
-                    "No Link in Clipboard", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                linkBar.ShowStatus("Copy a link first, or paste one into the field.", Theme.AccentWarning);
                 return;
             }
-            ProcessInputText(rawInput, InputSource.Paste);
+            linkBar.Stage(rawInput, insert);
+        }
+
+        private void DownloadClipboardLinks()
+        {
+            string rawInput = ReadClipboardText();
+            if (rawInput == null)
+            {
+                linkBar.ShowStatus("Copy a link first, or paste one into the field.", Theme.AccentWarning);
+                return;
+            }
+            // Submit through the link field so batches keep any links that still need attention.
+            linkBar.Stage(rawInput, false);
+            SubmitLink(linkBar.LinkText);
         }
 
         // Another application can hold the clipboard open briefly; retry instead of crashing.
@@ -44,32 +55,27 @@ namespace Stash
             return null;
         }
 
-        private void ProcessInputText(string rawInput, InputSource source)
+        // A null result keeps the original draft. A partial batch keeps only links
+        // that still need attention, so submitting again doesn't repeat finished work.
+        private List<string> ProcessInputText(string rawInput, InputSource source, TranscriptCaptions.Source inspected = null)
         {
             bool silent = source == InputSource.ClipboardWatch;
             List<string> extractedUrls = DownloadUrlValidator.ExtractUrls(rawInput);
-            if (extractedUrls.Count == 0)
-            {
-                if (!silent)
-                    MessageBox.Show(this,
-                        "Please use a valid video, audio, or playlist link starting with http:// or https://, then try again.",
-                        "Invalid Link", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
+            if (extractedUrls.Count == 0) return null;
 
-            if (!File.Exists(ytDlpPath) || !File.Exists(ffmpegPath))
+            if (!DownloadToolsReady)
             {
                 if (engineOperationRunning)
                 {
-                    ShowNotice("Engines are still installing. Add the link again when they are ready.");
-                    return;
+                    if (!silent) linkBar.ShowStatus("Preparing download engines…", Theme.TextSecondary);
+                    return null;
                 }
-                if (silent) return;
+                if (silent) return null;
                 DialogResult dr = MessageBox.Show(this,
                     "yt-dlp.exe and/or ffmpeg.exe are not installed yet.\n\nWould you like to automatically download and install them right now?",
                     "Install Required Dependencies", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (dr == DialogResult.Yes) RunEngineOperationAsync(false);
-                return;
+                return null;
             }
 
             List<string> singles = new List<string>();
@@ -84,7 +90,8 @@ namespace Stash
                 else playlists.Add(url);
             }
 
-            if (singles.Count > 0) QueueUrls(singles, null, null);
+            List<string> remaining = new List<string>();
+            if (singles.Count > 0 && !QueueUrls(singles, null, null, inspected)) remaining.AddRange(singles);
 
             // Each playlist or channel gets its own picker instead of being downloaded as one item.
             foreach (string playlist in playlists)
@@ -92,23 +99,30 @@ namespace Stash
                 if (silent) { Activate(); }
                 using (PlaylistPromptDialog dlg = new PlaylistPromptDialog(playlist, ytDlpPath, settings.BrowserCookies))
                 {
-                    if (dlg.ShowDialog(this) == DialogResult.OK)
-                        QueueUrls(dlg.ResultUrls, dlg.ResultTitles, dlg.ResultIds);
+                    if (dlg.ShowDialog(this) != DialogResult.OK ||
+                        !QueueUrls(dlg.ResultUrls, dlg.ResultTitles, dlg.ResultIds))
+                        remaining.Add(playlist);
                 }
             }
+            return remaining.Count == extractedUrls.Count ? null : remaining;
         }
 
         private bool IsAlreadyQueued(string url)
         {
             foreach (DownloadQueueItem item in downloadManager.GetItems())
-                if (DownloadManager.IsUnfinished(item.Status) && string.Equals(item.Url, url, StringComparison.OrdinalIgnoreCase))
-                    return true;
+            {
+                if (!DownloadManager.IsUnfinished(item.Status) || !string.Equals(item.Url, url, StringComparison.OrdinalIgnoreCase)) continue;
+                if (IsTranscriptMode != (item.Mode == DownloadMode.TranscriptOnly)) continue;
+                if (!IsTranscriptMode || item.TranscriptFormat == settings.TranscriptFormat &&
+                    string.Equals(item.TranscriptLanguage, settings.TranscriptLanguage, StringComparison.OrdinalIgnoreCase)) return true;
+            }
             return false;
         }
 
-        private void QueueUrls(IList<string> urls, IList<string> preResolvedTitles, IList<string> sourceIds)
+        private bool QueueUrls(IList<string> urls, IList<string> preResolvedTitles, IList<string> sourceIds,
+            TranscriptCaptions.Source inspected = null)
         {
-            if (urls == null || urls.Count == 0) return;
+            if (urls == null || urls.Count == 0) return false;
 
             string outFolder = settings.CurrentOutputFolder;
             if (!Directory.Exists(outFolder))
@@ -120,7 +134,7 @@ namespace Stash
                 catch (Exception ex)
                 {
                     MessageBox.Show(this, "Could not create output folder:\n" + ex.Message, "Invalid Folder", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
+                    return false;
                 }
             }
 
@@ -132,6 +146,9 @@ namespace Stash
             bool embedThumb = settings.EmbedThumbnail;
             int concurrentFragments = settings.ConcurrentFragments;
             string badgeLabel = YtDlpCommandBuilder.BuildBadgeLabel(mode, res, embedMeta, embedThumb, concurrentFragments);
+            if (mode == DownloadMode.TranscriptOnly)
+                badgeLabel = "TRANSCRIPT  ·  " + TranscriptFormatNames[(int)settings.TranscriptFormat] + "  ·  " +
+                    CaptionLanguageName(settings.TranscriptLanguage);
             bool isVideoMode = (mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv);
             if (isVideoMode && (settings.EmbedSubtitles || settings.IncludeAutoCaptions))
             {
@@ -159,6 +176,12 @@ namespace Stash
 
                 item.EmbedSubtitles = settings.EmbedSubtitles;
                 item.IncludeAutoCaptions = settings.IncludeAutoCaptions;
+                if (mode == DownloadMode.TranscriptOnly)
+                {
+                    item.TranscriptLanguage = settings.TranscriptLanguage;
+                    item.TranscriptFormat = settings.TranscriptFormat;
+                    item.InspectedCaptions = inspected;
+                }
                 item.BrowserCookies = settings.BrowserCookies;
                 item.FileNameStyle = settings.FileNameStyle;
                 if (sourceIds != null && i < sourceIds.Count) item.SourceId = sourceIds[i];
@@ -179,7 +202,7 @@ namespace Stash
             if (newItems.Count == 0)
             {
                 if (skipped > 0) ShowNotice(skipped == 1 ? "That link is already in the queue." : "Those links are already in the queue.");
-                return;
+                return skipped > 0;
             }
 
             downloadManager.AddItems(newItems);
@@ -198,6 +221,7 @@ namespace Stash
             if (skipped > 0) ShowNotice(string.Format("{0} added; {1} already in the queue.", newItems.Count, skipped));
 
             ProcessQueue();
+            return true;
         }
 
         private void UpdateQueueHeaderStats()
@@ -369,7 +393,12 @@ namespace Stash
                 ShowNotice("The downloaded file was moved or deleted.");
                 return;
             }
-            try { Process.Start(new ProcessStartInfo(item.OutputFilePath) { UseShellExecute = true }); }
+            try
+            {
+                if (item.Mode == DownloadMode.TranscriptOnly)
+                    Process.Start("notepad.exe", CommandLine.Quote(item.OutputFilePath));
+                else Process.Start(new ProcessStartInfo(item.OutputFilePath) { UseShellExecute = true });
+            }
             catch (Exception ex)
             {
                 AppLog.Error("Could not open file", ex);
@@ -452,6 +481,7 @@ namespace Stash
             }
 
             Enabled = false;
+            CancelCaptionCheck();
             progressRefreshTimer.Stop();
             engineCancellation.Cancel();
             settings.Save();
@@ -466,6 +496,7 @@ namespace Stash
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            CancelCaptionCheck();
             if (clipboardListening) RemoveClipboardFormatListener(Handle);
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
             progressRefreshTimer.Dispose();

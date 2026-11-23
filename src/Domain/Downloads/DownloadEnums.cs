@@ -26,7 +26,18 @@ namespace Stash
         BestAudioOnlyMp3,
         BestAudioOnlyM4a,
         BestAudioOnlyFlac,
-        BestAudioOnlyWav
+        BestAudioOnlyWav,
+        TranscriptOnly
+    }
+
+    internal enum DownloadKind { Video, Audio, Transcript }
+
+    internal enum TranscriptFormat
+    {
+        Srt,
+        Vtt,
+        TxtTimed,
+        TxtPlain
     }
 
     public enum VideoResolution

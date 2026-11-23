@@ -354,8 +354,98 @@ internal static class DownloadManagerTests
         await ShutdownAndStartupFailure();
         Console.WriteLine("Bulk pause, resume and restartable shutdown");
         await BulkPauseAndRestartableShutdown();
+        Console.WriteLine("Transcript-only downloads");
+        await TranscriptOnlyDownloads();
         Console.WriteLine("Real process ownership");
         await RealProcessOwnership();
+    }
+
+    private static async Task TranscriptOnlyDownloads()
+    {
+        FakeRunner runner = new FakeRunner();
+        DownloadManager manager = Manager(runner);
+        string folder = Path.Combine(testFolder, "transcripts");
+        Directory.CreateDirectory(folder);
+        DownloadQueueItem item = new DownloadQueueItem("https://example.com/captions", DownloadMode.TranscriptOnly,
+            VideoResolution.Best, true, true, 8, "Transcript", folder);
+        string source = "{\"title\":\"Lesson\",\"id\":\"lesson\",\"subtitles\":{\"en\":[{\"ext\":\"vtt\"}]}," +
+            "\"automatic_captions\":{\"en-orig\":[{\"ext\":\"vtt\"}],\"es\":[{\"ext\":\"vtt\"}]}}";
+        Assert(TranscriptCaptions.Select(TranscriptCaptions.Parse(source), "es").Automatic, "Explicit languages can use auto captions");
+        Assert(TranscriptCaptions.Select(TranscriptCaptions.Parse(
+            "{\"automatic_captions\":{\"en-orig\":[{}],\"es\":[{}]}}"), null).Language == "en-orig",
+            "Original must select the native auto-caption track");
+        List<TranscriptCaptions.Track> available = TranscriptCaptions.ListTracks(TranscriptCaptions.Parse(source));
+        Assert(available.Count == 2 && available[0].Language == "en" && !available[0].Automatic &&
+            available[1].Language == "es" && available[1].Automatic,
+            "Caption choices include available languages and prefer creator tracks of the same language");
+        Assert(TranscriptCaptions.Select(TranscriptCaptions.Parse("{\"language\":\"en-US\",\"subtitles\":{\"en\":[{}]}}"), null).Language == "en",
+            "Original can use the parent-language track when the source language is regional");
+        manager.AddItems(new[] { item });
+        manager.ProcessQueue("fake", null, 1);
+        Assert(runner.Calls[0].Arguments.Contains("--dump-single-json"), "Transcript must inspect available caption tracks first");
+        runner.Calls[0].Output(source);
+        runner.Calls[0].Result.SetResult(0);
+        await Until(() => runner.Calls.Count == 2 || item.Status == QueueItemStatus.Error);
+        Assert(runner.Calls.Count == 2, "A caption track should be selected and downloaded");
+        string arguments = runner.Calls[1].Arguments;
+        Assert(arguments.Contains("--skip-download") && arguments.Contains("--write-subs") &&
+            !arguments.Contains("--write-auto-subs") && arguments.Contains("--sub-langs \"^en$\"") &&
+            arguments.Contains("--convert-subs srt") && !arguments.Contains("--embed"),
+            "Original prefers edited captions and skips all audio, video, and embedding");
+        string existing = Path.Combine(folder, "Lesson [en].srt");
+        File.WriteAllText(existing, "existing");
+        string srt = "1\n00:00:01,000 --> 00:00:02,000\nA timed caption.\n";
+        File.WriteAllText(Path.Combine(item.TemporaryFolder, "caption.en.srt"), srt);
+        runner.Calls[1].Result.SetResult(0);
+        await Until(() => item.Status == QueueItemStatus.Completed);
+        Assert(Path.GetFileName(item.OutputFilePath) == "Lesson [en] (2).srt" &&
+            File.ReadAllText(item.OutputFilePath) == srt && File.ReadAllText(existing) == "existing",
+            "Completing a transcript publishes the timed output without overwriting an existing file");
+
+        DownloadQueueItem missing = new DownloadQueueItem(item.Url, DownloadMode.TranscriptOnly,
+            VideoResolution.Best, false, false, 1, "Transcript", folder);
+        missing.TranscriptLanguage = "ja";
+        manager.AddItems(new[] { missing });
+        await Until(() => runner.Calls.Count == 3);
+        runner.Calls[2].Output(source);
+        runner.Calls[2].Result.SetResult(0);
+        await Until(() => missing.Status == QueueItemStatus.Error);
+        Assert(runner.Calls.Count == 3 && missing.Failure.Message == "No captions available in this language." &&
+            missing.OutputFilePath == null, "Missing language must report a clear error without starting a download");
+
+        DownloadQueueItem noOutput = new DownloadQueueItem(item.Url, DownloadMode.TranscriptOnly,
+            VideoResolution.Best, false, false, 1, "Transcript", folder);
+        noOutput.TranscriptLanguage = "es";
+        noOutput.TranscriptFormat = TranscriptFormat.Vtt;
+        manager.AddItems(new[] { noOutput });
+        manager.ProcessQueue("fake", null, 1);
+        runner.Calls[3].Output(source);
+        runner.Calls[3].Result.SetResult(0);
+        await Until(() => runner.Calls.Count == 5);
+        Assert(runner.Calls[4].Arguments.Contains("--write-auto-subs") && runner.Calls[4].Arguments.Contains("--convert-subs vtt"),
+            "The selected VTT and auto-caption settings must reach the engine");
+        runner.Calls[4].Result.SetResult(0);
+        await Until(() => noOutput.Status == QueueItemStatus.Error);
+        Assert(noOutput.OutputFilePath == null, "An engine exit code of zero cannot complete an item without a subtitle file");
+
+        DownloadQueueItem text = new DownloadQueueItem(item.Url, DownloadMode.TranscriptOnly,
+            VideoResolution.Best, false, false, 1, "Transcript", folder);
+        text.TranscriptFormat = TranscriptFormat.TxtTimed;
+        text.InspectedCaptions = TranscriptCaptions.Parse(source);
+        manager.AddItems(new[] { text });
+        manager.ProcessQueue("fake", null, 1);
+        await Until(() => runner.Calls.Count == 6);
+        Assert(runner.Calls[5].Arguments.Contains("--skip-download") && runner.Calls[5].Arguments.Contains("--convert-subs srt") &&
+            !runner.Calls[5].Arguments.Contains("--dump-single-json"),
+            "A preflighted TXT job reuses inspected captions and downloads only the subtitle file");
+        File.WriteAllText(Path.Combine(text.TemporaryFolder, "caption.en.srt"), srt);
+        runner.Calls[5].Result.SetResult(0);
+        await Until(() => text.Status == QueueItemStatus.Completed || text.Status == QueueItemStatus.Error);
+        Assert(text.Status == QueueItemStatus.Completed && Path.GetFileName(text.OutputFilePath) == "Lesson [en].txt" &&
+            File.ReadAllText(text.OutputFilePath).TrimEnd() == "[00:00:01.000] A timed caption.",
+            "The queue should publish a timed TXT file with the cue start time");
+        await manager.ShutdownAsync();
+        Assert(!Directory.Exists(text.TemporaryFolder), "TXT jobs clean up intermediate subtitle files");
     }
 
     private static async Task FailureFolderCleanup()

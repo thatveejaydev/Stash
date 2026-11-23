@@ -6,7 +6,7 @@ namespace Stash
 {
     internal enum IconKind
     {
-        Link, Folder, Play, Pause, Close, Retry, Info, More, Gear, Cookie, Download, Video, Audio, Star, Warning
+        Link, Folder, Play, Pause, Close, Retry, Info, More, Gear, Cookie, Download, Video, Audio, Star, Warning, Transcript
     }
 
     // Line icons drawn on a 16-unit grid and scaled to the screen DPI, so every
@@ -102,6 +102,13 @@ namespace Stash
                         g.DrawLine(pen, 10f, 2.5f, 10f, 11.5f);
                         g.DrawLine(pen, 10f, 2.5f, 13.5f, 3.8f);
                         g.DrawEllipse(pen, 4.5f, 10f, 5.5f, 4f);
+                        break;
+                    case IconKind.Transcript:
+                        g.DrawPolygon(pen, new[] { new PointF(3f, 1.5f), new PointF(9f, 1.5f), new PointF(13f, 5.5f),
+                            new PointF(13f, 14.5f), new PointF(3f, 14.5f) });
+                        g.DrawLines(pen, new[] { new PointF(9f, 1.5f), new PointF(9f, 5.5f), new PointF(13f, 5.5f) });
+                        g.DrawLine(pen, 5.5f, 8.25f, 10.5f, 8.25f);
+                        g.DrawLine(pen, 5.5f, 11f, 9f, 11f);
                         break;
                     case IconKind.Star:
                         PointF[] star = new PointF[10];

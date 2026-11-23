@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -8,38 +8,11 @@ namespace Stash
 {
     public partial class MainForm
     {
-        private const int SettingsRowSaveTo = 2;
         private static readonly CookieBrowser[] CookieBrowsers = (CookieBrowser[])Enum.GetValues(typeof(CookieBrowser));
-
         private sealed class SettingsRow
         {
             public PopupMenuRow Row;
             public Func<PopupMenuRow, Panel> BuildSubmenu;
-        }
-
-        private bool IsVideoFormat
-        {
-            get
-            {
-                DownloadMode mode = (DownloadMode)settings.FormatIndex;
-                return mode == DownloadMode.BestVideoAndAudioMp4 || mode == DownloadMode.BestVideoAndAudioMkv;
-            }
-        }
-
-        // ---- Preset chip ----
-
-        private string GetPresetSummary()
-        {
-            string summary = FormatShortNames[settings.FormatIndex];
-            if (IsVideoFormat) summary += "  ·  " + QualityShortNames[settings.QualityIndex];
-            return summary + "  ·  " + GetFolderShortDisplayName(settings.CurrentOutputFolder);
-        }
-
-        private void UpdatePreset()
-        {
-            linkBar.PresetText = GetPresetSummary();
-            appToolTip.SetToolTip(linkBar.PresetAnchor, FormatPopupTitles[settings.FormatIndex] +
-                (IsVideoFormat ? ", " + QualityPopupTitles[settings.QualityIndex] : "") + "\nSaves to " + settings.CurrentOutputFolder);
         }
 
         private void UpdateBrowserCookiesTooltip()
@@ -122,13 +95,12 @@ namespace Stash
 
         // ---- Settings popup ----
 
-        // Settings popups opened from the link bar. Categories are listed on the right; the selected
-        // category's choices open to the left. The preset chip holds format, quality and folder;
-        // "More options" holds everything else.
-        private void ShowSettingsPopup(Control anchor, bool moreOptions, int initialRow)
+        // Advanced settings, with categories on the right and their choices on the left.
+        private void ShowSettingsPopup(Control anchor)
         {
             int rowStep = Dpi.Px(34);
             int gap = Dpi.Px(4);
+            bool transcript = IsTranscriptMode;
             int leftWidth = Dpi.Px(240);
             int rightMaxWidth = Dpi.Px(270);
             ToolStripDropDown popup = null;
@@ -153,27 +125,18 @@ namespace Stash
                 separators.Add(nextRowTop + separatorGap / 2);
                 nextRowTop += separatorGap;
             };
-            if (!moreOptions)
+            if (!transcript)
             {
-                addRow("Format", FormatShortNames[settings.FormatIndex], BuildFormatSubmenuPanel);
-                addRow("Quality", IsVideoFormat ? QualityShortNames[settings.QualityIndex] : "Video only", BuildQualitySubmenuPanel);
-                addRow("Save to", GetFolderShortDisplayName(settings.CurrentOutputFolder), parent => BuildSaveToSubmenuPanel(parent, () => popup, anchor));
-            }
-            else
-            {
-                // The file you get
                 addRow("Subtitles", GetSubtitlesShortDisplayName(), BuildSubtitlesSubmenuPanel);
                 addRow("Embed", GetEmbedShortDisplayName(), BuildEmbedSubmenuPanel);
-                addRow("File name", GetFileNameStyleShortName(settings.FileNameStyle), BuildFileNameSubmenuPanel);
-                addSeparator();
-                // How fast it downloads
-                addRow("Parallel", settings.ParallelCount + " at once", BuildParallelSubmenuPanel);
-                addRow("Speed boost", settings.ConcurrentFragments + "x", BuildTurboSubmenuPanel);
-                addSeparator();
-                // Where links and sign-ins come from
-                addRow("Cookies", GetCookieShortName(settings.BrowserCookies), BuildCookiesSubmenuPanel);
-                addRow("Clipboard", settings.WatchClipboard ? "Watching" : "Off", BuildClipboardSubmenuPanel);
             }
+            addRow("File name", GetFileNameStyleShortName(settings.FileNameStyle), BuildFileNameSubmenuPanel);
+            addSeparator();
+            addRow("Parallel", settings.ParallelCount + " at once", BuildParallelSubmenuPanel);
+            if (!transcript) addRow("Speed boost", settings.ConcurrentFragments + "x", BuildTurboSubmenuPanel);
+            addSeparator();
+            addRow("Cookies", GetCookieShortName(settings.BrowserCookies), BuildCookiesSubmenuPanel);
+            addRow("Clipboard", settings.WatchClipboard ? "Watching" : "Off", BuildClipboardSubmenuPanel);
 
             int leftHeight = nextRowTop + Dpi.Px(4);
             // Build every submenu once per opening and reuse it; rebuilding on each hover caused
@@ -227,7 +190,6 @@ namespace Stash
                 if (previous != null) previous.Dispose();
             };
 
-            List<Action> openers = new List<Action>();
             for (int i = 0; i < rows.Count; i++)
             {
                 int index = i;
@@ -250,21 +212,16 @@ namespace Stash
                     rootContainer.ResumeLayout();
                     updatePopupRegion();
                 };
-                openers.Add(open);
                 option.Row.MouseEnter += (s, e) => open();
                 option.Row.MouseDown += (s, e) => open();
                 pnlLeft.Controls.Add(option.Row);
             }
 
-            if (initialRow >= 0 && initialRow < openers.Count) openers[initialRow]();
             updatePopupRegion();
 
-            linkBar.SetChipOpen(anchor, true);
             popup.Closed += (s, e) =>
             {
-                linkBar.SetChipOpen(anchor, false);
-                UpdatePreset();
-                BeginInvoke((Action)popup.Dispose);
+                if (!IsDisposed && IsHandleCreated) BeginInvoke((Action)popup.Dispose);
             };
             int x = anchor.Width - popup.Width;
             popup.Show(anchor, new Point(x, anchor.Height + Dpi.Px(6)));
@@ -272,7 +229,8 @@ namespace Stash
 
         // ---- Submenus ----
 
-        private Panel BuildChoicePanel(int width, string[] titles, string[] tags, string[] subTexts, int selected, Action<int, PopupMenuRow, Panel> choose)
+        private Panel BuildChoicePanel(int width, string[] titles, string[] tags, string[] subTexts, int selected,
+            Action<int, PopupMenuRow, Panel> choose)
         {
             int rowH = subTexts == null ? Dpi.Px(34) : Dpi.Px(46);
             Panel container = Theme.CreatePopupPanel(width, titles.Length * rowH + Dpi.Px(8));
@@ -295,45 +253,7 @@ namespace Stash
             return container;
         }
 
-        private Panel BuildFormatSubmenuPanel(PopupMenuRow parentRow)
-        {
-            return BuildChoicePanel(Dpi.Px(270), FormatPopupTitles, FormatPopupRightTags, null, settings.FormatIndex, (index, row, panel) =>
-            {
-                settings.FormatIndex = index;
-                settings.Save();
-                SetBadge(parentRow, FormatShortNames[index]);
-                PopupMenuRow quality = (PopupMenuRow)parentRow.Parent.Controls[1];
-                SetBadge(quality, IsVideoFormat ? QualityShortNames[settings.QualityIndex] : "Video only");
-                UpdatePreset();
-            });
-        }
-
-        private Panel BuildQualitySubmenuPanel(PopupMenuRow parentRow)
-        {
-
-            Panel panel = BuildChoicePanel(Dpi.Px(250), QualityPopupTitles, QualityPopupRightTags, null, settings.QualityIndex, (index, row, container) =>
-            {
-                settings.QualityIndex = index;
-                settings.Save();
-                SetBadge(parentRow, IsVideoFormat ? QualityShortNames[index] : "Video only");
-                UpdatePreset();
-            });
-            // Submenus are reused while the popup is open, so re-check the format each time it shows.
-            Action applyFormat = () =>
-            {
-                foreach (Control control in panel.Controls)
-                {
-                    PopupMenuRow row = (PopupMenuRow)control;
-                    row.TitleOverrideColor = IsVideoFormat ? Color.Empty : Theme.TextMuted;
-                    row.Invalidate();
-                }
-            };
-            applyFormat();
-            panel.VisibleChanged += (s, e) => { if (panel.Visible) applyFormat(); };
-            return panel;
-        }
-
-        private Panel BuildSaveToSubmenuPanel(PopupMenuRow parentRow, Func<ToolStripDropDown> popup, Control anchor)
+        private Panel BuildSaveToSubmenuPanel(Func<ToolStripDropDown> popup, Control anchor)
         {
             int width = Dpi.Px(270);
             int rowH = Dpi.Px(46);
@@ -363,7 +283,6 @@ namespace Stash
                 {
                     if (e.Button != MouseButtons.Left) return;
                     SelectOutputFolder(folderPath);
-                    SetBadge(parentRow, GetFolderShortDisplayName(folderPath));
                     foreach (Control c in container.Controls)
                     {
                         PopupMenuRow other = c as PopupMenuRow;
@@ -375,10 +294,10 @@ namespace Stash
                 row.RemoveClicked += (s, e) =>
                 {
                     settings.RemoveFolderFromHistory(folderPath);
-                    UpdatePreset();
+                    UpdateHeaderSettings();
                     ToolStripDropDown current = popup();
                     if (current != null) current.Close();
-                    BeginInvoke((Action)(() => ShowSettingsPopup(anchor, false, SettingsRowSaveTo)));
+                    BeginInvoke((Action)(() => ShowFolderPopup(anchor)));
                 };
                 container.Controls.Add(row);
             }
@@ -403,7 +322,7 @@ namespace Stash
         private void SelectOutputFolder(string folderPath)
         {
             settings.AddFolderToHistory(folderPath);
-            UpdatePreset();
+            UpdateHeaderSettings();
         }
 
         private void PromptBrowseForFolder()
@@ -512,6 +431,7 @@ namespace Stash
                 settings.Save();
                 SetBadge(parentRow, GetCookieShortName(settings.BrowserCookies));
                 UpdateBrowserCookiesTooltip();
+                RefreshCaptionPreview();
             });
             // Explain when cookies help, below the choices.
             Label note = new Label

@@ -42,6 +42,7 @@ internal static class RegressionTests
         Console.WriteLine("  regression: FileNames"); FileNames();
         Console.WriteLine("  regression: SettingsPersistence"); SettingsPersistence(Path.Combine(root, "settings"));
         Console.WriteLine("  regression: QueuePersistence"); QueuePersistence(Path.Combine(root, "queue"));
+        Console.WriteLine("  regression: TranscriptText"); TranscriptTextExport(root);
         Console.WriteLine("  regression: PlaylistParsing"); PlaylistParsing();
         Console.WriteLine("  regression: Checksums"); Checksums();
         Console.WriteLine("  regression: TemporaryFolderSweep"); TemporaryFolderSweep(Path.Combine(root, "sweep"));
@@ -146,6 +147,14 @@ internal static class RegressionTests
         AppSettings settings = AppSettings.Load(path);
         settings.FileNameStyle = FileNameStyle.UploaderAndTitle;
         settings.WatchClipboard = true;
+        settings.FormatIndex = (int)DownloadMode.BestVideoAndAudioMkv;
+        settings.QualityIndex = (int)VideoResolution.Fhd1080p;
+        settings.SelectedKind = DownloadKind.Audio;
+        Assert(settings.FormatIndex == (int)DownloadMode.BestAudioOnlyMp3, "Audio starts with the default MP3 format");
+        settings.FormatIndex = (int)DownloadMode.BestAudioOnlyFlac;
+        settings.FormatIndex = (int)DownloadMode.TranscriptOnly;
+        settings.TranscriptLanguage = "es";
+        settings.TranscriptFormat = TranscriptFormat.TxtPlain;
         settings.LastEngineCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         settings.Save();
         Assert(Directory.GetFiles(folder, "*.tmp").Length == 0, "Atomic saves leave no temporary files");
@@ -154,6 +163,16 @@ internal static class RegressionTests
         AppSettings loaded = AppSettings.Load(path);
         Assert(loaded.FileNameStyle == FileNameStyle.UploaderAndTitle && loaded.WatchClipboard &&
             loaded.LastEngineCheckUtc == settings.LastEngineCheckUtc, "New preferences round-trip");
+        Assert(loaded.FormatIndex == (int)DownloadMode.TranscriptOnly && loaded.TranscriptLanguage == "es" &&
+            loaded.TranscriptFormat == TranscriptFormat.TxtPlain, "The plain TXT transcript preset round-trips");
+        loaded.SelectedKind = DownloadKind.Video;
+        Assert(loaded.FormatIndex == (int)DownloadMode.BestVideoAndAudioMkv && loaded.QualityIndex == (int)VideoResolution.Fhd1080p,
+            "Returning to Video restores its format and quality");
+        loaded.SelectedKind = DownloadKind.Audio;
+        Assert(loaded.FormatIndex == (int)DownloadMode.BestAudioOnlyFlac, "Returning to Audio restores its own format");
+        loaded.SelectedKind = DownloadKind.Transcript;
+        Assert(loaded.TranscriptFormat == TranscriptFormat.TxtPlain && loaded.TranscriptLanguage == "es",
+            "Switching modes preserves the last transcript format and language");
         Assert(File.GetLastWriteTimeUtc(path) == written, "Loading settings must not rewrite the file");
     }
 
@@ -174,17 +193,24 @@ internal static class RegressionTests
         DownloadQueueItem cancelled = new DownloadQueueItem("https://example.com/c", DownloadMode.BestVideoAndAudioMp4, VideoResolution.Best,
             false, false, 1, "MP4", folder);
         cancelled.Status = QueueItemStatus.Cancelled;
+        DownloadQueueItem transcript = new DownloadQueueItem("https://example.com/captions", DownloadMode.TranscriptOnly,
+            VideoResolution.Best, false, false, 1, "Transcript", folder);
+        transcript.TranscriptLanguage = "ja";
+        transcript.TranscriptFormat = TranscriptFormat.TxtTimed;
 
         QueueStore store = new QueueStore(path);
-        store.Save(new List<DownloadQueueItem> { paused, running, done, cancelled });
+        store.Save(new List<DownloadQueueItem> { paused, running, done, cancelled, transcript });
         List<DownloadQueueItem> restored = store.Load();
-        Assert(restored.Count == 3, "Cancelled items are not restored");
+        Assert(restored.Count == 4, "Cancelled items are not restored");
         Assert(restored[0].Status == QueueItemStatus.Paused && restored[0].TemporaryFolder == paused.TemporaryFolder &&
             restored[0].ProgressPercent == 42 && restored[0].SourceId == "pid" && restored[0].FileNameStyle == FileNameStyle.TitleWithId &&
             restored[0].CustomBaseFileName == "Paused one" && restored[0].Mode == DownloadMode.BestAudioOnlyFlac,
             "Unfinished items return paused with their partial-file folder");
         Assert(restored[1].Status == QueueItemStatus.Paused && restored[1].Resolution == VideoResolution.Hd720p, "Running items return paused");
         Assert(restored[2].Status == QueueItemStatus.Completed && restored[2].OutputFilePath == done.OutputFilePath, "Completed history is kept");
+        Assert(restored[3].Mode == DownloadMode.TranscriptOnly && restored[3].Status == QueueItemStatus.Paused &&
+            restored[3].TranscriptLanguage == "ja" && restored[3].TranscriptFormat == TranscriptFormat.TxtTimed,
+            "A queued transcript keeps its format and language after restart");
 
         File.WriteAllText(path, "{ not json");
         Assert(store.Load().Count == 0, "A corrupt queue file is ignored");
@@ -193,6 +219,35 @@ internal static class RegressionTests
         List<DownloadQueueItem> hostile = store.Load();
         Assert(hostile.Count == 1 && hostile[0].TemporaryFolder.StartsWith("C:\\Videos\\.stash-temp-", StringComparison.OrdinalIgnoreCase),
             "Restored items reject non-web links and foreign temporary folders");
+    }
+
+    private static void TranscriptTextExport(string folder)
+    {
+        string captions = Path.Combine(folder, "rolling.srt");
+        string plain = Path.Combine(folder, "paragraphs.txt");
+        string timed = Path.Combine(folder, "timed.txt");
+        File.WriteAllText(captions,
+            "1\n00:00:01,250 --> 00:00:02,125\n<i>Hello &amp; welcome.</i>\n\n" +
+            "2\n00:00:02,125 --> 00:00:03,500\nHello &amp; welcome.\nThis is a café.\n\n" +
+            "3\n00:00:05,750 --> 00:00:06,250 X1:12 X2:90\n次の段落。");
+        TranscriptText.Write(captions, plain, false, true, System.Threading.CancellationToken.None);
+        TranscriptText.Write(captions, timed, true, true, System.Threading.CancellationToken.None);
+        string[] paragraphs = File.ReadAllLines(plain);
+        Assert(paragraphs.Length == 3 && paragraphs[0] == "Hello & welcome. This is a café." &&
+            paragraphs[1] == "" && paragraphs[2] == "次の段落。",
+            "Plain TXT forms paragraphs from pauses, preserves Unicode, and removes rolling repeats");
+        string[] lines = File.ReadAllLines(timed);
+        Assert(lines.Length == 3 && lines[0] == "[00:00:01.250] Hello & welcome." &&
+            lines[1] == "[00:00:02.125] This is a café." && lines[2] == "[00:00:05.750] 次の段落。",
+            "Timed TXT shows precise cue starts and readable caption text");
+        TranscriptText.Write(captions, plain, false, false, System.Threading.CancellationToken.None);
+        Assert(File.ReadAllLines(plain)[0] == "Hello & welcome. Hello & welcome. This is a café.",
+            "Edited captions keep repetitions as supplied by the author");
+        File.WriteAllText(captions, "1\n00:00:01,000 --> 00:00:02,000\n<i></i>");
+        bool empty = false;
+        try { TranscriptText.Write(captions, plain, false, false, System.Threading.CancellationToken.None); }
+        catch (InvalidDataException) { empty = true; }
+        Assert(empty, "An empty text conversion cannot be published as a transcript");
     }
 
     private static void PlaylistParsing()

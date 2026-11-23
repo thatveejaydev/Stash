@@ -16,6 +16,12 @@ namespace Stash
         // boundaries, so ordinary words such as "webpage" or "message" do not trigger a rule.
         private static readonly Rule[] Rules =
         {
+            new Rule(@"^No captions available in this language\.$",
+                "No captions available in this language.",
+                "Check which captions the source provides, then add the link with a different language."),
+            new Rule(@"The captions did not contain any readable text\.",
+                "The captions did not contain any readable text.",
+                "Try a different caption language or save the original captions as SRT or VTT."),
             new Rule(@"\bprivate video\b|\bvideo is private\b",
                 "This video is private.", CookieSuggestion),
             new Rule(@"requested format is not available|no video formats found",

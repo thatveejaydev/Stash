@@ -304,7 +304,10 @@ namespace Stash
             {
                 try
                 {
-                    await DownloadAsync(item, execution, executable, ffmpeg, token);
+                    if (item.Mode == DownloadMode.TranscriptOnly)
+                        await DownloadTranscriptAsync(item, executable, ffmpeg, token);
+                    else
+                        await DownloadAsync(item, execution, executable, ffmpeg, token);
                 }
                 catch (Exception ex) { failure = ex; }
                 if (failure == null) return;
@@ -349,6 +352,106 @@ namespace Stash
         private void ReportError(DownloadQueueItem item, string context, Exception exception)
         {
             if (ErrorLog != null) ErrorLog(string.Format("[{0}] {1}: {2}", item.Id, context, exception));
+        }
+
+        internal async Task<TranscriptCaptions.Source> InspectCaptionsAsync(string executable, string url, CookieBrowser browser, CancellationToken token)
+        {
+            string json = null;
+            string errors = "";
+            int exitCode;
+            using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                timeout.CancelAfter(MetadataTimeoutMilliseconds);
+                try
+                {
+                    exitCode = await processRunner.RunAsync(executable,
+                        YtDlpCommandBuilder.BuildTranscriptMetadataArguments(url, browser), timeout.Token,
+                        line => json = line, line => errors = AppendEngineError(errors, line));
+                }
+                catch (OperationCanceledException)
+                {
+                    token.ThrowIfCancellationRequested();
+                    throw new TimeoutException("Caption lookup timed out.");
+                }
+            }
+            token.ThrowIfCancellationRequested();
+            if (exitCode != 0 || string.IsNullOrWhiteSpace(json))
+                throw new IOException("Caption lookup failed (engine exit code: " + exitCode + ").\n" + errors);
+
+            TranscriptCaptions.Source source = await Task.Run(() => TranscriptCaptions.Parse(json), token);
+            token.ThrowIfCancellationRequested();
+            if (source == null) throw new InvalidDataException("The engine returned no video information.");
+            return source;
+        }
+
+        private async Task DownloadTranscriptAsync(DownloadQueueItem item, string executable, string ffmpeg, CancellationToken token)
+        {
+            item.StatusText = "Finding captions";
+            NotifyChanged();
+            TranscriptCaptions.Source source = item.InspectedCaptions;
+            item.InspectedCaptions = null;
+            if (source == null) source = await InspectCaptionsAsync(executable, item.Url, item.BrowserCookies, token);
+            token.ThrowIfCancellationRequested();
+            item.Title = StorageFileService.SanitizeFileName(source.Title);
+            if (string.IsNullOrEmpty(item.Title)) item.Title = item.Url;
+            item.SourceId = source.Id ?? item.SourceId;
+            item.Uploader = source.Uploader ?? source.Channel;
+            TranscriptCaptions.Track track = TranscriptCaptions.Select(source, item.TranscriptLanguage);
+            if (track == null)
+            {
+                item.ErrorOutput = "";
+                Fail(item, "No captions available in this language.");
+                return;
+            }
+
+            item.Status = QueueItemStatus.Downloading;
+            item.StatusText = "Downloading captions";
+            NotifyChanged();
+            if (Directory.Exists(item.TemporaryFolder))
+                await StorageFileService.CleanupPartialFilesForItemAsync(item);
+            token.ThrowIfCancellationRequested();
+            StorageFileService.CreateTemporaryFolder(item);
+            if (Directory.GetFileSystemEntries(item.TemporaryFolder).Length > 0)
+                throw new IOException("The temporary caption folder could not be cleared.");
+            string errors = "";
+            int exitCode = await processRunner.RunAsync(executable,
+                YtDlpCommandBuilder.BuildTranscriptArguments(item, track, ffmpeg), token, null,
+                line => errors = AppendEngineError(errors, line));
+            item.ErrorOutput = errors;
+            token.ThrowIfCancellationRequested();
+            if (exitCode != 0)
+            {
+                Fail(item, "Caption download failed (engine exit code: " + exitCode + ").");
+                return;
+            }
+
+            string baseName = YtDlpCommandBuilder.BuildBaseFileName(item.FileNameStyle, source.Title, item.SourceId, item.Uploader);
+            if (string.IsNullOrEmpty(baseName)) baseName = "Transcript";
+            baseName += " [" + TranscriptCaptions.WithoutOriginalSuffix(track.Language) + "]";
+            string captionPath = StorageFileService.FindTranscriptCaption(item, YtDlpCommandBuilder.GetCaptionExtension(item.TranscriptFormat));
+            string extension = YtDlpCommandBuilder.GetTranscriptExtension(item.TranscriptFormat);
+            if (extension == ".txt")
+            {
+                item.Status = QueueItemStatus.Merging;
+                item.StatusText = "Formatting transcript";
+                NotifyChanged();
+                string textPath = Path.Combine(item.TemporaryFolder, "transcript.txt");
+                bool timed = item.TranscriptFormat == TranscriptFormat.TxtTimed;
+                await Task.Run(() => TranscriptText.Write(captionPath, textPath, timed, track.Automatic, token), token);
+                token.ThrowIfCancellationRequested();
+                captionPath = textPath;
+            }
+            item.OutputFilePath = StorageFileService.PublishTranscript(item, captionPath, baseName, extension);
+            Complete(item);
+            NotifyChanged();
+            try { await StorageFileService.CleanupPartialFilesForItemAsync(item); }
+            catch (Exception error) { ReportError(item, "Temporary caption folder cleanup failed", error); }
+        }
+
+        private static string AppendEngineError(string errors, string line)
+        {
+            errors += line + "\n";
+            return errors.Length > 16000 ? errors.Substring(errors.Length - 16000) : errors;
         }
 
         private async Task DownloadAsync(DownloadQueueItem item, Execution execution, string executable, string ffmpeg, CancellationToken token)
@@ -410,12 +513,7 @@ namespace Stash
                 token.ThrowIfCancellationRequested();
                 item.CompletedDetails = await CompletedDownloadDetails.ReadFileAsync(item.OutputFilePath, item.CompletedDetails);
                 token.ThrowIfCancellationRequested();
-                item.ProgressPercent = 100;
-                item.Speed = "—";
-                item.Eta = "00:00";
-                item.Status = QueueItemStatus.Completed;
-                item.StatusText = "Completed";
-                WriteLog(string.Format("[{0}] Completed: {1}", item.Id, item.Title));
+                Complete(item);
             }
             else
             {
@@ -425,6 +523,16 @@ namespace Stash
                 Fail(item, "Engine exit code: " + exitCode);
                 WriteLog(string.Format("[{0}] Failed with exit code {1}", item.Id, exitCode));
             }
+        }
+
+        private void Complete(DownloadQueueItem item)
+        {
+            item.ProgressPercent = 100;
+            item.Speed = "—";
+            item.Eta = "00:00";
+            item.Status = QueueItemStatus.Completed;
+            item.StatusText = "Completed";
+            WriteLog(string.Format("[{0}] Completed: {1}", item.Id, item.Title));
         }
 
         // Returns { title, id, uploader }; empty strings when the lookup fails.

@@ -16,8 +16,25 @@ namespace Stash
                 case DownloadMode.BestAudioOnlyM4a: return ".m4a";
                 case DownloadMode.BestAudioOnlyFlac: return ".flac";
                 case DownloadMode.BestAudioOnlyWav: return ".wav";
+                case DownloadMode.TranscriptOnly: return ".srt";
                 default: return ".mp4";
             }
+        }
+
+        internal static string GetTranscriptExtension(TranscriptFormat format)
+        {
+            switch (format)
+            {
+                case TranscriptFormat.Vtt: return ".vtt";
+                case TranscriptFormat.TxtTimed:
+                case TranscriptFormat.TxtPlain: return ".txt";
+                default: return ".srt";
+            }
+        }
+
+        internal static string GetCaptionExtension(TranscriptFormat format)
+        {
+            return format == TranscriptFormat.Vtt ? ".vtt" : ".srt";
         }
 
         public static int GetResolutionHeightCap(VideoResolution res)
@@ -88,6 +105,25 @@ namespace Stash
                 CommandLine.Quote(item.Url);
         }
 
+        internal static string BuildTranscriptMetadataArguments(string url, CookieBrowser browser)
+        {
+            return "--ignore-config --encoding utf-8 --no-playlist --ignore-no-formats-error --dump-single-json " +
+                BuildBrowserCookieArguments(browser) + "-- " + CommandLine.Quote(url);
+        }
+
+        internal static string BuildTranscriptArguments(DownloadQueueItem item, TranscriptCaptions.Track track, string ffmpegPath)
+        {
+            string format = GetCaptionExtension(item.TranscriptFormat).Substring(1);
+            string ffmpeg = string.IsNullOrEmpty(ffmpegPath) ? "" :
+                "--ffmpeg-location " + CommandLine.Quote(Path.GetDirectoryName(ffmpegPath)) + " ";
+            return "--ignore-config --no-playlist --ignore-no-formats-error --skip-download --windows-filenames " +
+                BuildBrowserCookieArguments(item.BrowserCookies) + ffmpeg +
+                (track.Automatic ? "--write-auto-subs " : "--write-subs ") +
+                "--sub-langs " + CommandLine.Quote("^" + track.Language + "$") + " --sub-format " + format + "/best " +
+                "--convert-subs " + format + " --paths " + CommandLine.Quote("home:" + item.TemporaryFolder) +
+                " -o " + CommandLine.Quote("caption.%(ext)s") + " -- " + CommandLine.Quote(item.Url);
+        }
+
         internal static string BuildBaseFileName(FileNameStyle style, string title, string id, string uploader)
         {
             string cleanTitle = StorageFileService.SanitizeFileName(title);
@@ -106,6 +142,8 @@ namespace Stash
 
         public static string BuildArguments(DownloadQueueItem item, string ffmpegPath)
         {
+            if (item.Mode == DownloadMode.TranscriptOnly)
+                throw new InvalidOperationException("Transcript downloads require a selected caption track.");
             string safeCustomName = !string.IsNullOrEmpty(item.CustomBaseFileName)
                 ? StorageFileService.SanitizeFileName(item.CustomBaseFileName)
                 : null;

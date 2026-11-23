@@ -155,6 +155,7 @@ namespace Stash
             string details = item.CompletedDetails == null
                 ? YtDlpCommandBuilder.GetTargetExtension(item.Mode).TrimStart('.').ToUpperInvariant()
                 : item.CompletedDetails.GetSummary(item.Mode).Replace("   ·   ", "  ·  ");
+            if (item.Mode == DownloadMode.TranscriptOnly) details = item.BadgeLabel;
             if (details.EndsWith("  ·  Completed")) details = details.Substring(0, details.Length - "  ·  Completed".Length);
             TextRenderer.DrawText(g, item.Title, TitleFont, new Rectangle(textX, rect.Y + Dpi.Px(9), textWidth, Dpi.Px(22)), Theme.TextPrimary, LineFlags);
             TextRenderer.DrawText(g, details, DetailFont, new Rectangle(textX, rect.Y + Dpi.Px(31), textWidth, Dpi.Px(18)), Theme.TextSecondary, LineFlags);
@@ -165,6 +166,8 @@ namespace Stash
         {
             double percent = GetProgressPercent(item);
             string status = (item.StatusText ?? "").Trim().TrimEnd('.', '…');
+            if (item.Mode == DownloadMode.TranscriptOnly && item.Status == QueueItemStatus.Downloading && status == "Downloading captions")
+                return status + "…";
             switch (item.Status)
             {
                 case QueueItemStatus.Queued:
@@ -238,9 +241,10 @@ namespace Stash
         private void DrawMediaTile(Graphics g, DownloadQueueItem item, Rectangle tile)
         {
             CardThumbnail thumbnail;
+            bool transcript = item.Mode == DownloadMode.TranscriptOnly;
             using (GraphicsPath path = Theme.CreateRoundedRectangle(tile, Dpi.Px(6)))
             {
-                if (thumbnails.TryGetValue(item, out thumbnail) && thumbnail.Image != null)
+                if (!transcript && thumbnails.TryGetValue(item, out thumbnail) && thumbnail.Image != null)
                 {
                     using (TextureBrush artwork = new TextureBrush(thumbnail.Image, WrapMode.TileFlipXY))
                     using (Matrix placement = new Matrix(
@@ -259,7 +263,8 @@ namespace Stash
             }
             bool audio = item.Mode == DownloadMode.BestAudioOnlyMp3 || item.Mode == DownloadMode.BestAudioOnlyM4a ||
                 item.Mode == DownloadMode.BestAudioOnlyFlac || item.Mode == DownloadMode.BestAudioOnlyWav;
-            Icons.Draw(g, audio ? IconKind.Audio : IconKind.Video, tile, Theme.BrandPurpleLight);
+            IconKind icon = transcript ? IconKind.Transcript : audio ? IconKind.Audio : IconKind.Video;
+            Icons.Draw(g, icon, tile, Theme.BrandPurpleLight);
         }
 
         // ---- Progress animation ----
