@@ -78,6 +78,7 @@ namespace Stash
         public event Action<DownloadQueueItem> OpenFileFolderRequested;
         public event Action<DownloadQueueItem> OpenFileRequested;
         public event Action<DownloadQueueItem> CopyUrlRequested;
+        public event Action<DownloadQueueItem> RenameRequested;
         internal event Action<QueueSectionAction> SectionActionRequested;
 
         public QueueListControl()
@@ -503,6 +504,7 @@ namespace Stash
             else if (e.KeyCode == Keys.Delete && DownloadManager.CanCancel(item.Status)) Raise(CancelRequested, item);
             else if (e.KeyCode == Keys.Delete) Raise(RemoveRequested, item);
             else if (e.KeyCode == Keys.C && e.Control) Raise(CopyUrlRequested, item);
+            else if (e.KeyCode == Keys.F2 && item.Status == QueueItemStatus.Completed) Raise(RenameRequested, item);
             else if (e.KeyCode == Keys.Apps || (e.KeyCode == Keys.F10 && e.Shift))
             {
                 Rectangle bounds = GetItemBounds(item);
@@ -548,6 +550,7 @@ namespace Stash
             {
                 menu.AddItem("Open file", "Enter", true, () => Raise(OpenFileRequested, item));
                 menu.AddItem("Show in folder", null, true, () => Raise(OpenFileFolderRequested, item));
+                menu.AddItem("Rename file", "F2", true, () => Raise(RenameRequested, item));
             }
             if (CanPauseOrResume(status))
                 menu.AddItem(status == QueueItemStatus.Paused ? "Resume" : "Pause", "Space", true, () => Raise(PauseResumeRequested, item));

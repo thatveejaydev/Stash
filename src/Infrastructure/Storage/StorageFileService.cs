@@ -171,11 +171,29 @@ namespace Stash
             return files[0];
         }
 
+        // Windows device names (CON, NUL, COM1...) cannot be used as a file name, with or without an extension.
+        internal static bool IsReservedDeviceName(string baseName)
+        {
+            string stem = baseName.Split('.')[0].TrimEnd(' ');
+            return Regex.IsMatch(stem, @"\A(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        // Renames a finished download within its folder and returns the new path. A change of letter case only is allowed.
+        internal static string RenameDownloadedFile(string path, string newBaseName)
+        {
+            string extension = Path.GetExtension(path);
+            string destination = Path.Combine(Path.GetDirectoryName(path), newBaseName + extension);
+            if (string.Equals(path, destination, StringComparison.Ordinal)) return path;
+            bool caseOnly = string.Equals(path, destination, StringComparison.OrdinalIgnoreCase);
+            if (!caseOnly && (File.Exists(destination) || Directory.Exists(destination)))
+                throw new IOException("A file with this name already exists.");
+            File.Move(path, destination);
+            return destination;
+        }
+
         internal static string PublishTranscript(DownloadQueueItem item, string sourcePath, string baseName, string extension)
         {
-            string stem = baseName.Split('.')[0];
-            if (Regex.IsMatch(stem, @"\A(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-                baseName = "_" + baseName;
+            if (IsReservedDeviceName(baseName)) baseName = "_" + baseName;
             for (int copy = 1; copy <= 999; copy++)
             {
                 string name = copy == 1 ? baseName : baseName + " (" + copy + ")";

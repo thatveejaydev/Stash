@@ -365,6 +365,7 @@ namespace Stash
             queueListView.OpenFileFolderRequested += OpenCompletedItemFolder;
             queueListView.OpenFileRequested += OpenCompletedFile;
             queueListView.CopyUrlRequested += CopyItemUrl;
+            queueListView.RenameRequested += RenameCompletedFile;
             queueListView.SectionActionRequested += HandleSectionAction;
             pnlCenter.Controls.Add(queueListView);
 

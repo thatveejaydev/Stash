@@ -66,7 +66,8 @@ Stash is powered by two open-source tools:
 - Choose where files are saved, and name files by title, title with video ID, or channel and title.
 - Drag links onto the window, or let Stash pick up links you copy (optional).
 - Quickly reuse recently selected folders.
-- Open a completed file’s location in File Explorer.
+- Open a completed file’s location in File Explorer. On Windows 11, it opens in a new tab of an open Explorer window with the file selected.
+- Rename a finished download from its menu or with F2.
 - Receive a warning when a similar file already exists.
 - Rename the new file instead of accidentally replacing an existing one.
 

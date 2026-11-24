@@ -4,15 +4,33 @@ using System.Windows.Forms;
 
 namespace Stash
 {
-    // Asked before a download would create a file with the same name as an existing one.
+    // Asks for a file name: before a download would create a file with the same name as an existing one,
+    // or when renaming a finished download.
     public class RenamePromptDialog : ThemedForm
     {
         private readonly TextBox txtNewName;
+        private readonly Func<string, string> validate;
         public string ChosenBaseName { get; private set; }
 
         public RenamePromptDialog(string existingFileName, string suggestedNewBaseName, string extension)
+            : this("File already exists", "A file with this name already exists",
+                "Save the new download under a different name, or cancel it.", "Existing file",
+                existingFileName, suggestedNewBaseName, extension, "Save as new file", null)
         {
-            Text = "File already exists";
+        }
+
+        // Rename mode. validate returns an error message for a name that cannot be used, or null.
+        internal RenamePromptDialog(string currentFileName, string currentBaseName, string extension, Func<string, string> validate)
+            : this("Rename file", "Rename file", "Enter a new name for the downloaded file.", "Current name",
+                currentFileName, currentBaseName, extension, "Rename", validate)
+        {
+        }
+
+        private RenamePromptDialog(string windowTitle, string heading, string description, string fileLabel, string fileName,
+            string suggestedBaseName, string extension, string actionText, Func<string, string> validate)
+        {
+            this.validate = validate;
+            Text = windowTitle;
             AutoScaleMode = AutoScaleMode.None;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
@@ -25,9 +43,9 @@ namespace Stash
             int inset = Dpi.Px(24);
             int contentWidth = width - inset * 2;
 
-            Label title = Theme.CreateDialogTitle("A file with this name already exists");
+            Label title = Theme.CreateDialogTitle(heading);
             title.Location = new Point(inset, Dpi.Px(20));
-            Label body = Theme.CreateDialogText("Save the new download under a different name, or cancel it.", contentWidth);
+            Label body = Theme.CreateDialogText(description, contentWidth);
             body.Location = new Point(inset, Dpi.Px(52));
 
             CardPanel existing = new CardPanel
@@ -37,18 +55,18 @@ namespace Stash
             };
             existing.Controls.Add(new Label
             {
-                Text = "Existing file", Location = new Point(Dpi.Px(14), Dpi.Px(8)), AutoSize = true,
+                Text = fileLabel, Location = new Point(Dpi.Px(14), Dpi.Px(8)), AutoSize = true,
                 Font = Theme.GetFont("Segoe UI", 8.5F), ForeColor = Theme.TextMuted, BackColor = Theme.BgSurface
             });
             existing.Controls.Add(new Label
             {
-                Text = existingFileName, Location = new Point(Dpi.Px(14), Dpi.Px(27)), Size = new Size(contentWidth - Dpi.Px(28), Dpi.Px(20)),
+                Text = fileName, Location = new Point(Dpi.Px(14), Dpi.Px(27)), Size = new Size(contentWidth - Dpi.Px(28), Dpi.Px(20)),
                 AutoEllipsis = true, Font = Theme.GetFont("Segoe UI", 9.5F), ForeColor = Theme.TextPrimary, BackColor = Theme.BgSurface, UseMnemonic = false
             });
 
             Label saveAs = new Label
             {
-                Text = "Save as", Location = new Point(inset, Dpi.Px(158)), AutoSize = true,
+                Text = validate == null ? "Save as" : "New name", Location = new Point(inset, Dpi.Px(158)), AutoSize = true,
                 Font = Theme.GetFont("Segoe UI Semibold", 9.5F), ForeColor = Theme.TextPrimary
             };
             CardPanel inputCard = new CardPanel
@@ -60,7 +78,7 @@ namespace Stash
             txtNewName = new TextBox
             {
                 Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Theme.BgInput, ForeColor = Theme.TextPrimary,
-                Font = Theme.GetFont("Segoe UI", 10F), Text = suggestedNewBaseName, AccessibleName = "New file name"
+                Font = Theme.GetFont("Segoe UI", 10F), Text = suggestedBaseName, AccessibleName = "New file name"
             };
             inputCard.Controls.Add(txtNewName);
             Label note = Theme.CreateDialogText(extension + " is added automatically.", contentWidth);
@@ -75,12 +93,14 @@ namespace Stash
 
             ModernButton cancel = Theme.CreateButton("Cancel", false, 80);
             cancel.DialogResult = DialogResult.Cancel;
-            ModernButton save = Theme.CreateButton("Save as new file", true, 130);
+            ModernButton save = Theme.CreateButton(actionText, true, validate == null ? 130 : 88);
             save.Click += (s, e) =>
             {
                 string cleaned = SanitizeFileName(txtNewName.Text.Trim());
-                if (string.IsNullOrEmpty(cleaned))
+                string problem = string.IsNullOrEmpty(cleaned) ? "Enter a file name." : validate == null ? null : validate(cleaned);
+                if (problem != null)
                 {
+                    error.Text = problem;
                     note.Visible = false;
                     error.Visible = true;
                     txtNewName.Focus();

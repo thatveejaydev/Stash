@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.9
+
+### New Features
+- **Rename Downloads:** Rename a finished file from its right-click or **More** menu, or press F2. Stash warns about names that are already taken and about files that are open in another app.
+
+### Improvements & Fixes
+- **Show in Folder Tabs:** On Windows 11, **Show in folder** opens the folder in a new tab of your open File Explorer window with the file selected, instead of opening another window.
+
 ## v0.2.8
 
 ### New Features

@@ -367,14 +367,14 @@ namespace Stash
             UpdateQueueHeaderStats();
         }
 
-        private void OpenCompletedItemFolder(DownloadQueueItem item)
+        private async void OpenCompletedItemFolder(DownloadQueueItem item)
         {
             if (item == null) return;
             try
             {
                 if (!string.IsNullOrEmpty(item.OutputFilePath) && File.Exists(item.OutputFilePath))
                 {
-                    Process.Start("explorer.exe", "/select," + CommandLine.Quote(item.OutputFilePath));
+                    await ExplorerReveal.ShowFileAsync(item.OutputFilePath);
                 }
                 else if (Directory.Exists(item.OutputFolder))
                 {
@@ -383,6 +383,55 @@ namespace Stash
                 else ShowNotice("The download folder no longer exists.");
             }
             catch (Exception ex) { AppLog.Error("Could not open folder", ex); }
+        }
+
+        private void RenameCompletedFile(DownloadQueueItem item)
+        {
+            if (item == null || item.Status != QueueItemStatus.Completed) return;
+            string path = item.OutputFilePath;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                ShowNotice("The downloaded file was moved or deleted.");
+                return;
+            }
+            string folder = Path.GetDirectoryName(path);
+            string extension = Path.GetExtension(path);
+            Func<string, string> validate = name =>
+            {
+                if (StorageFileService.IsReservedDeviceName(name)) return "Windows reserves this name. Choose another.";
+                string target = Path.Combine(folder, name + extension);
+                if (string.Equals(target, path, StringComparison.OrdinalIgnoreCase)) return null;
+                if (File.Exists(target) || Directory.Exists(target)) return "A file with this name already exists.";
+                if (IsNameReservedByQueue(item, name, extension)) return "A queued download will use this name.";
+                return null;
+            };
+            string newBaseName;
+            using (RenamePromptDialog dialog = new RenamePromptDialog(Path.GetFileName(path), Path.GetFileNameWithoutExtension(path), extension, validate))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                newBaseName = dialog.ChosenBaseName;
+            }
+            try
+            {
+                string renamed = StorageFileService.RenameDownloadedFile(path, newBaseName);
+                if (renamed == path) return;
+                item.OutputFilePath = renamed;
+                item.Title = newBaseName;
+                queueListView.RefreshChangedItems();
+                queueListView.Invalidate();
+                SaveQueue();
+                ShowNotice("Renamed to " + Path.GetFileName(renamed) + ".");
+            }
+            catch (FileNotFoundException) { ShowNotice("The downloaded file was moved or deleted."); }
+            catch (PathTooLongException) { ShowNotice("That name is too long for this folder."); }
+            catch (UnauthorizedAccessException) { ShowNotice("Stash doesn't have permission to rename this file."); }
+            catch (IOException ex)
+            {
+                const int SharingViolation = unchecked((int)0x80070020);
+                ShowNotice(Marshal.GetHRForException(ex) == SharingViolation
+                    ? "The file is open in another app. Close it and try again." : "Could not rename the file: " + ex.Message);
+                AppLog.Error("Could not rename the file", ex);
+            }
         }
 
         private void OpenCompletedFile(DownloadQueueItem item)
