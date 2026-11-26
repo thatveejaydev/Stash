@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.IO;
 using System.Windows.Forms;
 
 namespace Stash
@@ -66,6 +67,9 @@ namespace Stash
         private int hoveredHeaderLink = -1; // 0 = in progress, 1 = completed
         private string currentTip;
         private bool dropHighlight;
+        // A finished card pressed with the left button; becomes a file drag once the mouse moves far enough.
+        private DownloadQueueItem dragItem;
+        private Point dragOrigin;
 
         public DownloadQueueItem SelectedItem { get; private set; }
 
@@ -80,6 +84,11 @@ namespace Stash
         public event Action<DownloadQueueItem> CopyUrlRequested;
         public event Action<DownloadQueueItem> RenameRequested;
         internal event Action<QueueSectionAction> SectionActionRequested;
+        // Raised after a card was dragged out, with the effect the drop target chose.
+        internal event Action<DownloadQueueItem, DragDropEffects> FileDragged;
+        internal event Action<DownloadQueueItem> FileDragUnavailable;
+        // True while one of our own cards is being dragged, so Stash does not accept it as a dropped link.
+        internal bool IsDraggingFile { get; private set; }
 
         public QueueListControl()
         {
@@ -355,6 +364,16 @@ namespace Stash
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            if (dragItem != null)
+            {
+                if ((e.Button & MouseButtons.Left) == 0) dragItem = null;
+                else
+                {
+                    Size dragSize = SystemInformation.DragSize;
+                    Rectangle still = new Rectangle(dragOrigin.X - dragSize.Width / 2, dragOrigin.Y - dragSize.Height / 2, dragSize.Width, dragSize.Height);
+                    if (!still.Contains(e.Location)) { StartFileDrag(); return; }
+                }
+            }
             Rectangle bounds;
             Entry entry = HitTest(e.Location, out bounds);
             DownloadQueueItem item = entry == null ? null : entry.Item;
@@ -406,6 +425,7 @@ namespace Stash
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            dragItem = null;
             Focus();
             Rectangle bounds;
             Entry entry = HitTest(e.Location, out bounds);
@@ -429,6 +449,11 @@ namespace Stash
             }
             if (e.Button != MouseButtons.Left) return;
             CardAction action = HitAction(item, bounds, e.Location);
+            if (action == CardAction.None && item.Status == QueueItemStatus.Completed)
+            {
+                dragItem = item;
+                dragOrigin = e.Location;
+            }
             switch (action)
             {
                 case CardAction.PauseResume: Raise(PauseResumeRequested, item); break;
@@ -443,6 +468,42 @@ namespace Stash
                         if (a.Key == CardAction.More) ShowContextMenu(item, new Point(a.Value.Left, a.Value.Bottom + Dpi.Px(2)));
                     break;
             }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (e.Button == MouseButtons.Left) dragItem = null;
+        }
+
+        // Shell file drop data. Copy is the preferred effect, so Explorer copies by default and moves only with Shift.
+        internal static DataObject CreateFileDragData(string path)
+        {
+            DataObject data = new DataObject();
+            data.SetData(DataFormats.FileDrop, new[] { path });
+            data.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy)));
+            return data;
+        }
+
+        private void StartFileDrag()
+        {
+            DownloadQueueItem item = dragItem;
+            dragItem = null;
+            string path = item.OutputFilePath;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                Raise(FileDragUnavailable, item);
+                return;
+            }
+            DragDropEffects effect;
+            IsDraggingFile = true;
+            try { effect = DoDragDrop(CreateFileDragData(path), DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link); }
+            finally { IsDraggingFile = false; }
+            Cursor = Cursors.Default;
+            hoveredItem = null;
+            hoveredAction = CardAction.None;
+            Invalidate();
+            if (FileDragged != null) FileDragged(item, effect);
         }
 
         protected override void OnMouseDoubleClick(MouseEventArgs e)

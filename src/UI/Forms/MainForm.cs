@@ -138,7 +138,8 @@ namespace Stash
             control.AllowDrop = true;
             control.DragEnter += (s, e) =>
             {
-                bool valid = ReadDroppedText(e.Data) != null;
+                // A finished file dragged out of our own queue is never a link to download.
+                bool valid = !queueListView.IsDraggingFile && ReadDroppedText(e.Data) != null;
                 e.Effect = valid ? DragDropEffects.Copy | DragDropEffects.Link : DragDropEffects.None;
                 queueListView.DropHighlight = valid;
             };
@@ -146,6 +147,7 @@ namespace Stash
             control.DragDrop += (s, e) =>
             {
                 queueListView.DropHighlight = false;
+                if (queueListView.IsDraggingFile) return;
                 string text = ReadDroppedText(e.Data);
                 if (text == null) return;
                 Activate();
@@ -367,6 +369,8 @@ namespace Stash
             queueListView.OpenFileRequested += OpenCompletedFile;
             queueListView.CopyUrlRequested += CopyItemUrl;
             queueListView.RenameRequested += RenameFile;
+            queueListView.FileDragged += OnFileDragged;
+            queueListView.FileDragUnavailable += item => ShowNotice("The downloaded file was moved or deleted.");
             queueListView.SectionActionRequested += HandleSectionAction;
             pnlCenter.Controls.Add(queueListView);
 

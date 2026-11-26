@@ -399,6 +399,14 @@ internal static class DownloadManagerTests
         await QueueAndParallelism();
         Console.WriteLine("Rename while downloading");
         await PendingRenameOnCompletion();
+        Console.WriteLine("File drag data");
+        string dragged = Path.Combine(testFolder, "dragged file.mp4");
+        System.Windows.Forms.DataObject dragData = QueueListControl.CreateFileDragData(dragged);
+        string[] droppedFiles = dragData.GetData(System.Windows.Forms.DataFormats.FileDrop) as string[];
+        Assert(droppedFiles != null && droppedFiles.Length == 1 && droppedFiles[0] == dragged, "A dragged card must carry its file path");
+        MemoryStream preferred = dragData.GetData("Preferred DropEffect") as MemoryStream;
+        Assert(preferred != null && BitConverter.ToInt32(preferred.ToArray(), 0) == (int)System.Windows.Forms.DragDropEffects.Copy,
+            "Dragging a file out must copy by default");
         Console.WriteLine("Pause/resume and stale output");
         await PauseResumeAndStaleOutput();
         Console.WriteLine("Cancel overrides pause");

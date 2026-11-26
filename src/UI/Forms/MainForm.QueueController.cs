@@ -511,6 +511,19 @@ namespace Stash
             }
         }
 
+        // Copies and links leave the file in place. A Shift+drag move takes it away, and drop targets
+        // don't report where it went, so Stash can only tell the user it no longer has the file.
+        private async void OnFileDragged(DownloadQueueItem item, DragDropEffects effect)
+        {
+            string path = item.OutputFilePath;
+            if (string.IsNullOrEmpty(path)) return;
+            // Some targets finish the move just after the drop returns.
+            if ((effect & DragDropEffects.Move) != 0 && File.Exists(path)) await Task.Delay(750);
+            if (File.Exists(path)) return;
+            logWriter.Write("Moved out of Stash by drag and drop: " + Path.GetFileName(path));
+            ShowNotice("Moved " + Path.GetFileName(path) + " out of Stash. Its card can no longer open the file.");
+        }
+
         private void OpenCompletedFile(DownloadQueueItem item)
         {
             if (item == null) return;
