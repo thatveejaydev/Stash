@@ -20,9 +20,11 @@ namespace Stash
         }
 
         // Rename mode. validate returns an error message for a name that cannot be used, or null.
-        internal RenamePromptDialog(string currentFileName, string currentBaseName, string extension, Func<string, string> validate)
-            : this("Rename file", "Rename file", "Enter a new name for the downloaded file.", "Current name",
-                currentFileName, currentBaseName, extension, "Rename", validate)
+        // When deferred, the download is still running and the name is applied once it finishes.
+        internal RenamePromptDialog(string currentFileName, string currentBaseName, string extension, Func<string, string> validate, bool deferred = false)
+            : this("Rename file", "Rename file",
+                deferred ? "The download keeps running. The new name is applied when it finishes." : "Enter a new name for the downloaded file.",
+                "Current name", currentFileName, currentBaseName, extension, "Rename", validate)
         {
         }
 

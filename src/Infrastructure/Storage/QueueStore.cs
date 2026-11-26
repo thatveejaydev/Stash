@@ -41,6 +41,7 @@ namespace Stash
             public string OutputFolder { get; set; }
             public string TemporaryFolder { get; set; }
             public string CustomBaseFileName { get; set; }
+            public string PendingRenameBaseName { get; set; }
             public bool MetadataResolved { get; set; }
             public bool Completed { get; set; }
             public double ProgressPercent { get; set; }
@@ -68,7 +69,8 @@ namespace Stash
                     BrowserCookies = item.BrowserCookies.ToString(), FileNameStyle = item.FileNameStyle.ToString(),
                     ConcurrentFragments = item.ConcurrentFragments, BadgeLabel = item.BadgeLabel,
                     OutputFolder = item.OutputFolder, TemporaryFolder = item.TemporaryFolder,
-                    CustomBaseFileName = item.CustomBaseFileName, MetadataResolved = item.MetadataResolved,
+                    CustomBaseFileName = item.CustomBaseFileName,
+                    PendingRenameBaseName = done ? null : item.PendingRenameBaseName, MetadataResolved = item.MetadataResolved,
                     Completed = done, ProgressPercent = item.ProgressPercent, OutputFilePath = item.OutputFilePath,
                     Thumbnail = item.ThumbnailUri == null ? null : item.ThumbnailUri.AbsoluteUri
                 });
@@ -131,6 +133,11 @@ namespace Stash
                     item.TemporaryFolder = Path.GetFullPath(record.TemporaryFolder);
                 item.CustomBaseFileName = record.CustomBaseFileName;
                 item.MetadataResolved = record.MetadataResolved;
+                // A pending rename is only kept when it is still a usable file name.
+                if (!record.Completed && !string.IsNullOrWhiteSpace(record.PendingRenameBaseName) &&
+                    StorageFileService.SanitizeFileName(record.PendingRenameBaseName) == record.PendingRenameBaseName &&
+                    !StorageFileService.IsReservedDeviceName(record.PendingRenameBaseName))
+                    item.PendingRenameBaseName = record.PendingRenameBaseName;
                 item.OutputFilePath = record.OutputFilePath;
                 Uri thumbnail;
                 if (Uri.TryCreate(record.Thumbnail, UriKind.Absolute, out thumbnail) &&

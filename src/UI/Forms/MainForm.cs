@@ -66,6 +66,7 @@ namespace Stash
             };
             downloadManager.Log += AppendLog;
             downloadManager.ErrorLog += logWriter.WriteError;
+            downloadManager.PendingRenameFailed += OnPendingRenameFailed;
             noticeTimer.Tick += (sender, args) => { noticeTimer.Stop(); notice.Visible = false; };
             FitInitialWindowToScreen();
             CheckToolsStatus();
@@ -365,7 +366,7 @@ namespace Stash
             queueListView.OpenFileFolderRequested += OpenCompletedItemFolder;
             queueListView.OpenFileRequested += OpenCompletedFile;
             queueListView.CopyUrlRequested += CopyItemUrl;
-            queueListView.RenameRequested += RenameCompletedFile;
+            queueListView.RenameRequested += RenameFile;
             queueListView.SectionActionRequested += HandleSectionAction;
             pnlCenter.Controls.Add(queueListView);
 

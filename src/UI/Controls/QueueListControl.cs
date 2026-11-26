@@ -35,13 +35,13 @@ namespace Stash
 
             public CardSnapshot(DownloadQueueItem item)
             {
-                Title = item.Title; StatusText = item.StatusText; Speed = item.Speed; Eta = item.Eta;
+                Title = item.DisplayTitle; StatusText = item.StatusText; Speed = item.Speed; Eta = item.Eta;
                 Status = item.Status; Progress = item.ProgressPercent; Details = item.CompletedDetails; Failure = item.Failure;
             }
 
             public bool Matches(DownloadQueueItem item)
             {
-                return Title == item.Title && StatusText == item.StatusText && Speed == item.Speed && Eta == item.Eta &&
+                return Title == item.DisplayTitle && StatusText == item.StatusText && Speed == item.Speed && Eta == item.Eta &&
                     Status == item.Status && Progress == item.ProgressPercent && Details == item.CompletedDetails && Failure == item.Failure;
             }
         }
@@ -504,7 +504,7 @@ namespace Stash
             else if (e.KeyCode == Keys.Delete && DownloadManager.CanCancel(item.Status)) Raise(CancelRequested, item);
             else if (e.KeyCode == Keys.Delete) Raise(RemoveRequested, item);
             else if (e.KeyCode == Keys.C && e.Control) Raise(CopyUrlRequested, item);
-            else if (e.KeyCode == Keys.F2 && item.Status == QueueItemStatus.Completed) Raise(RenameRequested, item);
+            else if (e.KeyCode == Keys.F2 && CanRename(item.Status)) Raise(RenameRequested, item);
             else if (e.KeyCode == Keys.Apps || (e.KeyCode == Keys.F10 && e.Shift))
             {
                 Rectangle bounds = GetItemBounds(item);
@@ -536,6 +536,12 @@ namespace Stash
             else if (bounds.Bottom > ClientSize.Height) scrollBar.Value += bounds.Bottom - ClientSize.Height + Dpi.Px(4);
         }
 
+        // Unfinished downloads can be renamed too; the new name is applied when they finish.
+        private static bool CanRename(QueueItemStatus status)
+        {
+            return status == QueueItemStatus.Completed || DownloadManager.IsUnfinished(status);
+        }
+
         private static bool CanPauseOrResume(QueueItemStatus status)
         {
             return status == QueueItemStatus.Queued || status == QueueItemStatus.FetchingInfo ||
@@ -552,6 +558,8 @@ namespace Stash
                 menu.AddItem("Show in folder", null, true, () => Raise(OpenFileFolderRequested, item));
                 menu.AddItem("Rename file", "F2", true, () => Raise(RenameRequested, item));
             }
+            if (status != QueueItemStatus.Completed && CanRename(status))
+                menu.AddItem("Rename file", "F2", true, () => Raise(RenameRequested, item));
             if (CanPauseOrResume(status))
                 menu.AddItem(status == QueueItemStatus.Paused ? "Resume" : "Pause", "Space", true, () => Raise(PauseResumeRequested, item));
             if (status == QueueItemStatus.Error || status == QueueItemStatus.Cancelled)

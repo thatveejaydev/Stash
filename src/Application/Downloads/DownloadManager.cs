@@ -46,6 +46,8 @@ namespace Stash
         public event Action ProgressChanged;
         public event Action<string> Log;
         public event Action<string> ErrorLog;
+        // Raised when a rename chosen during the download could not be applied; the file keeps its original name.
+        internal event Action<DownloadQueueItem, string, Exception> PendingRenameFailed;
 
         public DownloadManager(IDownloadProcessRunner processRunner,
             Func<DownloadQueueItem, string, string, bool> confirmFileName)
@@ -442,6 +444,7 @@ namespace Stash
                 captionPath = textPath;
             }
             item.OutputFilePath = StorageFileService.PublishTranscript(item, captionPath, baseName, extension);
+            ApplyPendingRename(item);
             Complete(item);
             NotifyChanged();
             try { await StorageFileService.CleanupPartialFilesForItemAsync(item); }
@@ -513,6 +516,7 @@ namespace Stash
                 token.ThrowIfCancellationRequested();
                 item.CompletedDetails = await CompletedDownloadDetails.ReadFileAsync(item.OutputFilePath, item.CompletedDetails);
                 token.ThrowIfCancellationRequested();
+                ApplyPendingRename(item);
                 Complete(item);
             }
             else
@@ -522,6 +526,29 @@ namespace Stash
                 token.ThrowIfCancellationRequested();
                 Fail(item, "Engine exit code: " + exitCode);
                 WriteLog(string.Format("[{0}] Failed with exit code {1}", item.Id, exitCode));
+            }
+        }
+
+        // Runs once the engine has released the finished file, so the active download is never disturbed.
+        // A failed rename keeps the original name and never fails the download.
+        private void ApplyPendingRename(DownloadQueueItem item)
+        {
+            string newBaseName = item.PendingRenameBaseName;
+            item.PendingRenameBaseName = null;
+            if (string.IsNullOrEmpty(newBaseName)) return;
+            try
+            {
+                string path = item.OutputFilePath;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                    throw new FileNotFoundException("The finished file could not be found.", path);
+                item.OutputFilePath = StorageFileService.RenameDownloadedFile(path, newBaseName);
+                item.Title = newBaseName;
+                WriteLog(string.Format("[{0}] Renamed on completion: {1}", item.Id, Path.GetFileName(item.OutputFilePath)));
+            }
+            catch (Exception ex)
+            {
+                ReportError(item, "Rename on completion failed", ex);
+                if (PendingRenameFailed != null && !stopping) PendingRenameFailed(item, newBaseName, ex);
             }
         }
 

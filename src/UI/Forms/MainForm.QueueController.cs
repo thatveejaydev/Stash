@@ -331,8 +331,10 @@ namespace Stash
             foreach (DownloadQueueItem other in downloadManager.GetItems())
             {
                 if (other == current || !DownloadManager.IsUnfinished(other.Status)) continue;
-                if (!string.Equals(other.CustomBaseFileName, baseName, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(YtDlpCommandBuilder.GetTargetExtension(other.Mode), ext, StringComparison.OrdinalIgnoreCase)) continue;
+                // An unfinished item reserves both the name it downloads to and any rename waiting for it to finish.
+                if (!string.Equals(other.CustomBaseFileName, baseName, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(other.PendingRenameBaseName, baseName, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(GetExpectedExtension(other), ext, StringComparison.OrdinalIgnoreCase)) continue;
                 if (StorageFileService.SameDirectory(other.OutputFolder, current.OutputFolder)) return true;
             }
             return false;
@@ -385,6 +387,74 @@ namespace Stash
             catch (Exception ex) { AppLog.Error("Could not open folder", ex); }
         }
 
+        private static string GetExpectedExtension(DownloadQueueItem item)
+        {
+            return item.Mode == DownloadMode.TranscriptOnly
+                ? YtDlpCommandBuilder.GetTranscriptExtension(item.TranscriptFormat)
+                : YtDlpCommandBuilder.GetTargetExtension(item.Mode);
+        }
+
+        private void RenameFile(DownloadQueueItem item)
+        {
+            if (item == null) return;
+            if (item.Status == QueueItemStatus.Completed) RenameCompletedFile(item);
+            else if (DownloadManager.IsUnfinished(item.Status)) RenameWhenFinished(item);
+        }
+
+        // The engine still owns the file, so only remember the name; DownloadManager applies it on completion.
+        private void RenameWhenFinished(DownloadQueueItem item)
+        {
+            string extension = GetExpectedExtension(item);
+            string current = item.CustomBaseFileName ?? (item.Title != item.Url ? item.Title : "");
+            string suggested = item.PendingRenameBaseName ?? current;
+            Func<string, string> validate = name =>
+            {
+                if (StorageFileService.IsReservedDeviceName(name)) return "Windows reserves this name. Choose another.";
+                if (string.Equals(name, current, StringComparison.OrdinalIgnoreCase)) return null;
+                string target = Path.Combine(item.OutputFolder, name + extension);
+                if (File.Exists(target) || Directory.Exists(target)) return "A file with this name already exists.";
+                if (IsNameReservedByQueue(item, name, extension)) return "A queued download will use this name.";
+                return null;
+            };
+            string newBaseName;
+            string currentFileName = current.Length == 0 ? "Not known yet" : current + extension;
+            using (RenamePromptDialog dialog = new RenamePromptDialog(currentFileName, suggested, extension, validate, true))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                newBaseName = dialog.ChosenBaseName;
+            }
+            // The download may have finished while the dialog was open.
+            if (item.Status == QueueItemStatus.Completed)
+            {
+                ApplyRename(item, item.OutputFilePath, newBaseName);
+                return;
+            }
+            bool unchanged = string.Equals(newBaseName, current, StringComparison.Ordinal);
+            if (unchanged && item.PendingRenameBaseName == null) return;
+            item.PendingRenameBaseName = unchanged ? null : newBaseName;
+            queueListView.RefreshChangedItems();
+            queueListView.Invalidate();
+            SaveQueue();
+            ShowNotice(unchanged ? "The download will keep its original name."
+                : "Will be renamed to " + newBaseName + extension + " when the download finishes.");
+        }
+
+        private void OnPendingRenameFailed(DownloadQueueItem item, string newBaseName, Exception error)
+        {
+            ShowNotice("The finished download kept its original name. " + DescribeRenameError(error));
+        }
+
+        private static string DescribeRenameError(Exception error)
+        {
+            const int SharingViolation = unchecked((int)0x80070020);
+            if (error is FileNotFoundException) return "The downloaded file was moved or deleted.";
+            if (error is PathTooLongException) return "That name is too long for this folder.";
+            if (error is UnauthorizedAccessException) return "Stash doesn't have permission to rename this file.";
+            if (error is IOException && Marshal.GetHRForException(error) == SharingViolation)
+                return "The file is open in another app. Close it and try again.";
+            return "Could not rename the file: " + error.Message;
+        }
+
         private void RenameCompletedFile(DownloadQueueItem item)
         {
             if (item == null || item.Status != QueueItemStatus.Completed) return;
@@ -411,6 +481,16 @@ namespace Stash
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 newBaseName = dialog.ChosenBaseName;
             }
+            ApplyRename(item, path, newBaseName);
+        }
+
+        private void ApplyRename(DownloadQueueItem item, string path, string newBaseName)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                ShowNotice("The downloaded file was moved or deleted.");
+                return;
+            }
             try
             {
                 string renamed = StorageFileService.RenameDownloadedFile(path, newBaseName);
@@ -422,15 +502,12 @@ namespace Stash
                 SaveQueue();
                 ShowNotice("Renamed to " + Path.GetFileName(renamed) + ".");
             }
-            catch (FileNotFoundException) { ShowNotice("The downloaded file was moved or deleted."); }
-            catch (PathTooLongException) { ShowNotice("That name is too long for this folder."); }
-            catch (UnauthorizedAccessException) { ShowNotice("Stash doesn't have permission to rename this file."); }
-            catch (IOException ex)
+            catch (Exception ex)
             {
-                const int SharingViolation = unchecked((int)0x80070020);
-                ShowNotice(Marshal.GetHRForException(ex) == SharingViolation
-                    ? "The file is open in another app. Close it and try again." : "Could not rename the file: " + ex.Message);
-                AppLog.Error("Could not rename the file", ex);
+                if (!(ex is IOException) && !(ex is UnauthorizedAccessException)) throw;
+                ShowNotice(DescribeRenameError(ex));
+                if (!(ex is FileNotFoundException) && !(ex is PathTooLongException) && !(ex is UnauthorizedAccessException))
+                    AppLog.Error("Could not rename the file", ex);
             }
         }
 

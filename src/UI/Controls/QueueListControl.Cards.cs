@@ -112,7 +112,7 @@ namespace Stash
             DrawMediaTile(g, item, tile);
             int textX = tile.Right + Dpi.Px(14);
             int textWidth = Math.Max(Dpi.Px(1), GetTextRight(item, rect) - textX);
-            TextRenderer.DrawText(g, item.Title, TitleFont, new Rectangle(textX, rect.Y + Dpi.Px(11), textWidth, Dpi.Px(22)), Theme.TextPrimary, LineFlags);
+            TextRenderer.DrawText(g, item.DisplayTitle, TitleFont, new Rectangle(textX, rect.Y + Dpi.Px(11), textWidth, Dpi.Px(22)), Theme.TextPrimary, LineFlags);
 
             if (item.Status == QueueItemStatus.Error || item.Status == QueueItemStatus.Cancelled)
             {
@@ -157,7 +157,7 @@ namespace Stash
                 : item.CompletedDetails.GetSummary(item.Mode).Replace("   ·   ", "  ·  ");
             if (item.Mode == DownloadMode.TranscriptOnly) details = item.BadgeLabel;
             if (details.EndsWith("  ·  Completed")) details = details.Substring(0, details.Length - "  ·  Completed".Length);
-            TextRenderer.DrawText(g, item.Title, TitleFont, new Rectangle(textX, rect.Y + Dpi.Px(9), textWidth, Dpi.Px(22)), Theme.TextPrimary, LineFlags);
+            TextRenderer.DrawText(g, item.DisplayTitle, TitleFont, new Rectangle(textX, rect.Y + Dpi.Px(9), textWidth, Dpi.Px(22)), Theme.TextPrimary, LineFlags);
             TextRenderer.DrawText(g, details, DetailFont, new Rectangle(textX, rect.Y + Dpi.Px(31), textWidth, Dpi.Px(18)), Theme.TextSecondary, LineFlags);
             DrawActions(g, item, rect);
         }

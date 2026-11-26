@@ -121,6 +121,59 @@ internal static class DownloadManagerTests
         await manager.ShutdownAsync();
     }
 
+    private static async Task PendingRenameOnCompletion()
+    {
+        FakeRunner runner = new FakeRunner();
+        DownloadManager manager = Manager(runner);
+        List<string> failures = new List<string>();
+        manager.PendingRenameFailed += (failed, name, error) => failures.Add(name);
+        DownloadQueueItem renamed = Item(), blocked = Item();
+        manager.AddItems(new[] { renamed, blocked });
+        manager.ProcessQueue("fake", null, 2);
+        await Until(() => runner.Calls.Count == 2);
+
+        renamed.PendingRenameBaseName = "My new name";
+        Assert(renamed.DisplayTitle == "My new name", "A pending rename must be shown while downloading");
+        string original = Path.Combine(testFolder, "pending-original.mp4");
+        File.WriteAllBytes(original, new byte[16]);
+        runner.Calls[0].Output("[download] 40.0% of 10MiB at 1MiB/s ETA 00:10");
+        await Until(() => renamed.ProgressPercent == 40);
+        Assert(renamed.Status == QueueItemStatus.Downloading && runner.Calls[0].Token.IsCancellationRequested == false,
+            "A pending rename must not interrupt the running download");
+        runner.Calls[0].Output("STASH_FINAL:" + original);
+        runner.Calls[0].Result.SetResult(0);
+        await Until(() => renamed.Status == QueueItemStatus.Completed);
+        string expected = Path.Combine(testFolder, "My new name.mp4");
+        Assert(renamed.OutputFilePath == expected && File.Exists(expected) && !File.Exists(original),
+            "The finished file must be renamed on completion");
+        Assert(renamed.Title == "My new name" && renamed.PendingRenameBaseName == null, "The rename must be applied once");
+
+        // A name taken while downloading keeps the original file and reports the failure without failing the download.
+        string taken = Path.Combine(testFolder, "Taken name.mp4");
+        File.WriteAllBytes(taken, new byte[4]);
+        blocked.PendingRenameBaseName = "Taken name";
+        string blockedFile = Path.Combine(testFolder, "pending-blocked.mp4");
+        File.WriteAllBytes(blockedFile, new byte[8]);
+        runner.Calls[1].Output("STASH_FINAL:" + blockedFile);
+        runner.Calls[1].Result.SetResult(0);
+        await Until(() => blocked.Status == QueueItemStatus.Completed);
+        Assert(blocked.OutputFilePath == blockedFile && File.Exists(blockedFile) && new FileInfo(taken).Length == 4,
+            "A failed rename must keep the original file and never overwrite another");
+        Assert(failures.Count == 1 && failures[0] == "Taken name" && blocked.PendingRenameBaseName == null,
+            "A failed rename must be reported once");
+        await manager.ShutdownAsync();
+
+        QueueStore store = new QueueStore(Path.Combine(testFolder, "pending-queue.json"));
+        DownloadQueueItem paused = Item();
+        paused.PendingRenameBaseName = "Saved rename";
+        DownloadQueueItem invalid = Item();
+        invalid.PendingRenameBaseName = "bad:name";
+        store.Save(new[] { paused, invalid });
+        List<DownloadQueueItem> restored = store.Load();
+        Assert(restored.Count == 2 && restored[0].PendingRenameBaseName == "Saved rename" && restored[1].PendingRenameBaseName == null,
+            "Pending renames must survive a restart and invalid names must be dropped");
+    }
+
     private static async Task PauseResumeAndStaleOutput()
     {
         FakeRunner runner = new FakeRunner();
@@ -344,6 +397,8 @@ internal static class DownloadManagerTests
         await retryManager.ShutdownAsync();
         Console.WriteLine("Queue and parallelism");
         await QueueAndParallelism();
+        Console.WriteLine("Rename while downloading");
+        await PendingRenameOnCompletion();
         Console.WriteLine("Pause/resume and stale output");
         await PauseResumeAndStaleOutput();
         Console.WriteLine("Cancel overrides pause");

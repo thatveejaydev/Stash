@@ -24,6 +24,9 @@ namespace Stash
         public string OutputFolder { get; set; }
         public string TemporaryFolder { get; internal set; }
         public string CustomBaseFileName { get; set; }
+        // A rename chosen while the download was unfinished; applied to the finished file on completion.
+        internal string PendingRenameBaseName { get; set; }
+        internal string DisplayTitle { get { return PendingRenameBaseName ?? Title; } }
         public QueueItemStatus Status { get; internal set; }
         public string StatusText { get; internal set; }
         public double ProgressPercent { get; internal set; }
